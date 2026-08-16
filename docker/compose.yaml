@@ -98,8 +98,8 @@ services:
     image: minio/minio
     restart: unless-stopped
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "${MINIO_API_PORT:-10002}:9000"
+      - "${MINIO_CONSOLE_PORT:-10003}:9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
@@ -129,7 +129,7 @@ services:
     pull_policy: missing
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "${CLIENT_HTTP_PORT:-10000}:3000"
     environment:
       SUPABASE_URL: http://kong:8000
       # Browser-facing URLs. The HOST_IP defaults suit a plain IP/port
@@ -140,7 +140,7 @@ services:
       SUPABASE_ADMIN_KEY: ${SERVICE_ROLE_KEY}
       API_BASE_URL: ${SITE_URL}
       S3_ENDPOINT: http://minio:9000
-      S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:-http://${HOST_IP}:9000}
+      S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:-http://${HOST_IP}:${MINIO_API_PORT:-10002}}
       S3_REGION: us-east-1
       S3_BUCKET_NAME: ${S3_BUCKET_NAME}
       S3_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
@@ -149,6 +149,10 @@ services:
       STORAGE_FIXED_QUOTA: ${STORAGE_FIXED_QUOTA:-1073741824}
       TRANSLATION_FIXED_QUOTA: ${TRANSLATION_FIXED_QUOTA:-50000}
       FONT_BASE_URL: ${FONT_BASE_URL:-}
+      # Self-hosted premium switch: when true every account is treated as
+      # the pro plan, ungating cloud sync, offline TTS cache, email-in and
+      # the top-plan quotas without a paid subscription.
+      PREMIUM_ENABLED: ${PREMIUM_ENABLED:-false}
     depends_on:
       - kong
       - minio

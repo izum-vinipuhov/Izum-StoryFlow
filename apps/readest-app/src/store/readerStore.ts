@@ -192,6 +192,67 @@ export const useReaderStore = create<ReaderStore>((set, get) => ({
       }
       const isPseStream = !!book.url && isPseStreamFileName(book.url);
       const isFeed = !!book.url && isFeedBookUrl(book.url);
+      if (book.format === 'AUDIOBOOK') {
+        // Audiobooks have no document — the viewer plays the chapter files
+        // listed in the manifest. Skip DocumentLoader and the foliate
+        // metadata/annotation pipeline entirely.
+        const audioManifest = await appService.loadAudiobookManifest(book);
+        const audioConfig = await appService.loadBookConfig(book, settings);
+        audioConfig.booknotes = audioConfig.booknotes?.filter((booknote) => booknote.cfi) ?? [];
+        // Self-heal configs whose progress tuple was corrupted before track
+        // durations were coerced to numbers (0 + {} => "[object Object]"
+        // strings) — otherwise the books row keeps failing to sync.
+        const hasValidProgress =
+          Array.isArray(audioConfig.progress) &&
+          typeof audioConfig.progress[0] === 'number' &&
+          typeof audioConfig.progress[1] === 'number';
+        if (!hasValidProgress) {
+          audioConfig.progress = [0, audioManifest.totalDurationSec || 0];
+          audioConfig.audioPosition ??= { chapterIndex: 0, positionSec: 0 };
+          await appService.saveBookConfig(book, audioConfig, settings);
+          // Heal the in-memory library row too, so the next books sync push
+          // replaces the corrupted server value.
+          book.progress = audioConfig.progress;
+          book.updatedAt = Date.now();
+        }
+        const newBookData: BookData = {
+          id,
+          book,
+          file: null,
+          config: audioConfig,
+          bookDoc: null,
+          isFixedLayout: false,
+          audioManifest,
+        };
+        useBookDataStore.setState((state) => ({
+          booksData: { ...state.booksData, [id]: newBookData },
+        }));
+        const configViewSettings = audioConfig.viewSettings!;
+        const globalViewSettings = settings.globalViewSettings;
+        set((state) => ({
+          viewStates: {
+            ...state.viewStates,
+            [key]: {
+              ...state.viewStates[key],
+              key,
+              view: null,
+              viewerKey: `${key}-${uniqueId()}`,
+              isPrimary,
+              loading: false,
+              inited: false,
+              error: null,
+              ribbonVisible: false,
+              ttsEnabled: false,
+              autoScrollEnabled: false,
+              syncing: false,
+              gridInsets: null,
+              previewMode: false,
+              viewSettings: { ...globalViewSettings, ...configViewSettings },
+            },
+          },
+        }));
+        return;
+      }
       let bookDoc = bookData?.bookDoc;
       let file: File | null = bookData?.file ?? null;
       if (!bookDoc || (!isPseStream && !isFeed && !file) || reload) {

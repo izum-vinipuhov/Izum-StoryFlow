@@ -37,7 +37,7 @@ import { TTSPlaybackInfo } from './usePlaybackInfo';
 import { useCountdownLabel } from './useCountdownLabel';
 import TTSScrubber from './TTSScrubber';
 import SpeedRuler, { formatRate } from './SpeedRuler';
-import TTSChaptersView from './TTSChaptersView';
+import TTSChaptersView, { AudiobookSectionData } from './TTSChaptersView';
 import { TTS_STOP_AT_CHAPTER_END } from '@/services/tts/TTSSessionManager';
 import type { UseTTSDownloadsResult } from '@/app/reader/hooks/useTTSDownloads';
 
@@ -90,6 +90,11 @@ type TTSPlayerSheetProps = {
   onGetPlaybackInfo: () => TTSPlaybackInfo | null;
   downloads: UseTTSDownloadsResult;
   activeSectionIndex: number | null;
+  /** The audiobook session drives the player (no TTS voices/timers). */
+  isAudiobook?: boolean;
+  audiobook?: AudiobookSectionData | null;
+  /** Open the sheet on this sub-view instead of the main one. */
+  initialView?: SheetView;
 };
 
 // Full player sheet: cover, chapter, scrubber, transport, and one compact
@@ -120,6 +125,9 @@ const TTSPlayerSheet = ({
   onGetPlaybackInfo,
   downloads,
   activeSectionIndex,
+  isAudiobook = false,
+  audiobook = null,
+  initialView,
 }: TTSPlayerSheetProps) => {
   const _ = useTranslation();
   const router = useRouter();
@@ -171,15 +179,16 @@ const TTSPlayerSheet = ({
   // Fresh open: land on the main view with current rate/voice.
   useEffect(() => {
     if (!isOpen) return;
-    setView('main');
+    setView(initialView ?? 'main');
     setRate(getViewSettings(bookKey)?.ttsRate ?? 1.0);
     setSelectedVoice(onGetVoiceId());
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen]);
+  }, [isOpen, initialView]);
 
   useEffect(() => {
     if (!isOpen) return;
     const fetchVoices = async () => {
+      if (isAudiobook) return;
       const groups = await onGetVoices(ttsLang);
       const voicesCount = groups.reduce((acc, group) => acc + group.voices.length, 0);
       if (!groups || voicesCount === 0) {
@@ -255,7 +264,9 @@ const TTSPlayerSheet = ({
   // routed to the upgrade page (or sign-in), the sheet closing first so the
   // navigation isn't hidden behind it.
   const handleOpenDownloads = () => {
-    if (isDownloadPremium) {
+    // The audiobook section is not the premium TTS cache — it must be
+    // reachable regardless of the plan.
+    if (isDownloadPremium || (audiobook?.chapters.length ?? 0) > 0) {
       setView('chapters');
     } else if (user) {
       onClose();
@@ -371,50 +382,91 @@ const TTSPlayerSheet = ({
             )
           )}
           <div dir='ltr' className='flex items-center justify-center gap-1'>
-            <button
-              type='button'
-              className='rounded-full p-2'
-              title={_('Previous Paragraph')}
-              aria-label={_('Previous Paragraph')}
-              onClick={() => onBackward(false)}
-            >
-              <MdKeyboardDoubleArrowLeft size={iconSize24} />
-            </button>
-            <button
-              type='button'
-              className='rounded-full p-2'
-              title={_('Previous Sentence')}
-              aria-label={_('Previous Sentence')}
-              onClick={() => onBackward(true)}
-            >
-              <MdKeyboardArrowLeft size={iconSize28} />
-            </button>
-            <button
-              type='button'
-              className='btn btn-primary btn-circle mx-2 h-14 min-h-14 w-14'
-              aria-label={isPlaying ? _('Pause') : _('Play')}
-              onClick={onTogglePlay}
-            >
-              {isPlaying ? <MdOutlinePause size={iconSize32} /> : <MdPlayArrow size={iconSize32} />}
-            </button>
-            <button
-              type='button'
-              className='rounded-full p-2'
-              title={_('Next Sentence')}
-              aria-label={_('Next Sentence')}
-              onClick={() => onForward(true)}
-            >
-              <MdKeyboardArrowRight size={iconSize28} />
-            </button>
-            <button
-              type='button'
-              className='rounded-full p-2'
-              title={_('Next Paragraph')}
-              aria-label={_('Next Paragraph')}
-              onClick={() => onForward(false)}
-            >
-              <MdKeyboardDoubleArrowRight size={iconSize24} />
-            </button>
+            {isAudiobook ? (
+              <>
+                <button
+                  type='button'
+                  className='rounded-full p-2'
+                  title={_('Previous Chapter')}
+                  aria-label={_('Previous Chapter')}
+                  onClick={() => onBackward(true)}
+                >
+                  <MdKeyboardArrowLeft size={iconSize28} />
+                </button>
+                <button
+                  type='button'
+                  className='btn btn-primary btn-circle mx-2 h-14 min-h-14 w-14'
+                  aria-label={isPlaying ? _('Pause') : _('Play')}
+                  onClick={onTogglePlay}
+                >
+                  {isPlaying ? (
+                    <MdOutlinePause size={iconSize32} />
+                  ) : (
+                    <MdPlayArrow size={iconSize32} />
+                  )}
+                </button>
+                <button
+                  type='button'
+                  className='rounded-full p-2'
+                  title={_('Next Chapter')}
+                  aria-label={_('Next Chapter')}
+                  onClick={() => onForward(true)}
+                >
+                  <MdKeyboardArrowRight size={iconSize28} />
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  type='button'
+                  className='rounded-full p-2'
+                  title={_('Previous Paragraph')}
+                  aria-label={_('Previous Paragraph')}
+                  onClick={() => onBackward(false)}
+                >
+                  <MdKeyboardDoubleArrowLeft size={iconSize24} />
+                </button>
+                <button
+                  type='button'
+                  className='rounded-full p-2'
+                  title={_('Previous Sentence')}
+                  aria-label={_('Previous Sentence')}
+                  onClick={() => onBackward(true)}
+                >
+                  <MdKeyboardArrowLeft size={iconSize28} />
+                </button>
+                <button
+                  type='button'
+                  className='btn btn-primary btn-circle mx-2 h-14 min-h-14 w-14'
+                  aria-label={isPlaying ? _('Pause') : _('Play')}
+                  onClick={onTogglePlay}
+                >
+                  {isPlaying ? (
+                    <MdOutlinePause size={iconSize32} />
+                  ) : (
+                    <MdPlayArrow size={iconSize32} />
+                  )}
+                </button>
+                <button
+                  type='button'
+                  className='rounded-full p-2'
+                  title={_('Next Sentence')}
+                  aria-label={_('Next Sentence')}
+                  onClick={() => onForward(true)}
+                >
+                  <MdKeyboardArrowRight size={iconSize28} />
+                </button>
+                <button
+                  type='button'
+                  className='rounded-full p-2'
+                  title={_('Next Paragraph')}
+                  aria-label={_('Next Paragraph')}
+                  onClick={() => onForward(false)}
+                >
+                  <MdKeyboardDoubleArrowRight size={iconSize24} />
+                </button>
+              </>
+            )}
           </div>
           <div className='flex w-full gap-2'>
             <button
@@ -428,62 +480,79 @@ const TTSPlayerSheet = ({
                 {_('Speed')}
               </span>
             </button>
-            <button
-              type='button'
-              aria-label={_('Voice')}
-              onClick={() => setView('voice')}
-              className='not-eink:bg-base-200 eink-bordered flex h-14 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl'
-            >
-              <RiVoiceAiFill size={iconSize18} />
-              <span className='text-base-content/60 max-w-full truncate px-1 text-xs'>
-                {currentVoiceName ? _(currentVoiceName) : _('Voice')}
-              </span>
-            </button>
-            <button
-              type='button'
-              aria-label={_('Sleep Timer')}
-              onClick={() => setView('timer')}
-              className='not-eink:bg-base-200 eink-bordered flex h-14 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl'
-            >
-              <MdAlarm size={iconSize18} />
-              <span className='text-base-content/60 max-w-full truncate px-1 text-xs tabular-nums'>
-                {timerCaption}
-              </span>
-            </button>
+            {!isAudiobook && (
+              <>
+                <button
+                  type='button'
+                  aria-label={_('Voice')}
+                  onClick={() => setView('voice')}
+                  className='not-eink:bg-base-200 eink-bordered flex h-14 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl'
+                >
+                  <RiVoiceAiFill size={iconSize18} />
+                  <span className='text-base-content/60 max-w-full truncate px-1 text-xs'>
+                    {currentVoiceName ? _(currentVoiceName) : _('Voice')}
+                  </span>
+                </button>
+                <button
+                  type='button'
+                  aria-label={_('Sleep Timer')}
+                  onClick={() => setView('timer')}
+                  className='not-eink:bg-base-200 eink-bordered flex h-14 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl'
+                >
+                  <MdAlarm size={iconSize18} />
+                  <span className='text-base-content/60 max-w-full truncate px-1 text-xs tabular-nums'>
+                    {timerCaption}
+                  </span>
+                </button>
+              </>
+            )}
           </div>
-          {!isNarrating && downloads.supported && downloads.chapters.length > 0 && (
-            <button
-              type='button'
-              aria-label={_('Offline Audio')}
-              onClick={handleOpenDownloads}
-              className='not-eink:bg-base-200 eink-bordered flex w-full items-center gap-3 rounded-xl px-3 py-2.5'
-            >
-              <MdOutlineFileDownload size={iconSize24} className='shrink-0' />
-              <div className='flex min-w-0 flex-1 flex-col items-start'>
-                <span className='text-sm font-semibold'>{_('Offline Audio')}</span>
-                <span className='text-base-content/60 line-clamp-1 text-start text-xs'>
-                  {premiumBadge
-                    ? _('Download chapters for offline playback')
-                    : _('{{done}} of {{total}} downloaded', {
-                        done: downloads.chapters.filter((c) => downloads.statusOf(c) === 'complete')
-                          .length,
-                        total: downloads.chapters.length,
-                      })}
-                </span>
-              </div>
-              {premiumBadge && (
-                <span className='badge badge-sm badge-ghost shrink-0'>{premiumBadge}</span>
-              )}
-              <MdChevronRight size={iconSize24} className='shrink-0 rtl:rotate-180' />
-            </button>
-          )}
+          {!isNarrating &&
+            ((downloads.supported && downloads.chapters.length > 0) ||
+              (audiobook?.chapters.length ?? 0) > 0) && (
+              <button
+                type='button'
+                aria-label={_('Offline Audio')}
+                onClick={handleOpenDownloads}
+                className='not-eink:bg-base-200 eink-bordered flex w-full items-center gap-3 rounded-xl px-3 py-2.5'
+              >
+                <MdOutlineFileDownload size={iconSize24} className='shrink-0' />
+                <div className='flex min-w-0 flex-1 flex-col items-start'>
+                  <span className='text-sm font-semibold'>
+                    {audiobook?.chapters.length ? _('Audiobook') : _('Offline Audio')}
+                  </span>
+                  <span className='text-base-content/60 line-clamp-1 text-start text-xs'>
+                    {audiobook?.chapters.length
+                      ? _('Audiobook: {{done}} of {{total}} chapters', {
+                          done: audiobook.chapters.filter((_, index) =>
+                            audiobook.isChapterLocal(index),
+                          ).length,
+                          total: audiobook.chapters.length,
+                        })
+                      : premiumBadge
+                        ? _('Download chapters for offline playback')
+                        : _('{{done}} of {{total}} downloaded', {
+                            done: downloads.chapters.filter(
+                              (c) => downloads.statusOf(c) === 'complete',
+                            ).length,
+                            total: downloads.chapters.length,
+                          })}
+                  </span>
+                </div>
+                {premiumBadge && !(audiobook?.chapters.length ?? 0) && (
+                  <span className='badge badge-sm badge-ghost shrink-0'>{premiumBadge}</span>
+                )}
+                <MdChevronRight size={iconSize24} className='shrink-0 rtl:rotate-180' />
+              </button>
+            )}
         </div>
       )}
       {view === 'chapters' && (
         <TTSChaptersView
           downloads={downloads}
-          activeSectionIndex={activeSectionIndex}
+          activeSectionIndex={isAudiobook ? null : activeSectionIndex}
           isEink={isEink}
+          audiobook={audiobook}
         />
       )}
       {view === 'speed' && (

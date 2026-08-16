@@ -8,6 +8,7 @@ import { useBookDataStore } from '@/store/bookDataStore';
 import { FIXED_LAYOUT_FORMATS } from '@/types/book';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useDeviceControlStore } from '@/store/deviceStore';
+import { useAudiobookStore } from '@/store/audiobookStore';
 import { eventDispatcher } from '@/utils/event';
 import type { FooterBarProps, NavigationHandlers, FooterBarChildProps } from './types';
 import { debounce } from '@/utils/debounce';
@@ -16,6 +17,7 @@ import { RSVPControl } from '../rsvp';
 import MobileFooterBar from './MobileFooterBar';
 import DesktopFooterBar from './DesktopFooterBar';
 import { getFooterBarPosition } from './position';
+import { speakEventFor } from '../../utils/speakRouting';
 import TTSControl from '../tts/TTSControl';
 
 const FooterBar: React.FC<FooterBarProps> = ({
@@ -40,6 +42,7 @@ const FooterBar: React.FC<FooterBarProps> = ({
   const viewState = getViewState(bookKey);
   const progress = getProgress(bookKey);
   const viewSettings = getViewSettings(bookKey);
+  const audiobookPlayable = useAudiobookStore((s) => s.playable[bookKey] === true);
 
   const actionTab = hoveredBookKey === bookKey ? bottomBarTab : '';
   const isVisible = hoveredBookKey === bookKey;
@@ -95,9 +98,8 @@ const FooterBar: React.FC<FooterBarProps> = ({
   const handleSpeakText = useCallback(async () => {
     if (!view || !progress || !viewState) return;
 
-    const eventType = viewState.ttsEnabled ? 'tts-stop' : 'tts-speak';
-    eventDispatcher.dispatch(eventType, { bookKey });
-  }, [view, progress, viewState, bookKey]);
+    eventDispatcher.dispatch(speakEventFor(viewState.ttsEnabled, audiobookPlayable), { bookKey });
+  }, [view, progress, viewState, bookKey, audiobookPlayable]);
 
   const handleSetActionTab = useCallback(
     (tab: string) => {

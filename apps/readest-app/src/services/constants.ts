@@ -26,6 +26,7 @@ import {
   ReadSettings,
   ReadwiseSettings,
   SystemSettings,
+  YandexBooksSettings,
   WebDAVSettings,
   GoogleDriveSettings,
   S3Settings,
@@ -110,6 +111,10 @@ export const DEFAULT_HARDCOVER_SETTINGS = {
   lastSyncedAt: 0,
   autoSync: false,
 } as HardcoverSettings;
+
+export const DEFAULT_YANDEX_BOOKS_SETTINGS = {
+  accessToken: '',
+} as YandexBooksSettings;
 
 export const DEFAULT_WEBDAV_SETTINGS = {
   enabled: false,
@@ -229,6 +234,7 @@ export const DEFAULT_SYSTEM_SETTINGS: Partial<SystemSettings> = {
   bookorbit: DEFAULT_BOOKORBIT_SETTINGS,
   readwise: DEFAULT_READWISE_SETTINGS,
   hardcover: DEFAULT_HARDCOVER_SETTINGS,
+  yandexBooks: DEFAULT_YANDEX_BOOKS_SETTINGS,
   webdav: DEFAULT_WEBDAV_SETTINGS,
   googleDrive: DEFAULT_GOOGLE_DRIVE_SETTINGS,
   s3: DEFAULT_S3_SETTINGS,

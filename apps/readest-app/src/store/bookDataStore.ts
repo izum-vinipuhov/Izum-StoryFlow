@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { SystemSettings } from '@/types/settings';
 import { Book, BookConfig, BookNote } from '@/types/book';
+import { AudiobookManifest } from '@/types/audiobook';
 import { EnvConfigType } from '@/services/environment';
 import { BookDoc } from '@/libs/document';
 import { useLibraryStore } from './libraryStore';
@@ -63,6 +64,8 @@ export interface BookData {
   config: BookConfig | null;
   bookDoc: BookDoc | null;
   isFixedLayout: boolean;
+  /** AUDIOBOOK-only chapter list, loaded from Books/<hash>/chapters.json. */
+  audioManifest?: AudiobookManifest;
 }
 
 interface BookDataState {

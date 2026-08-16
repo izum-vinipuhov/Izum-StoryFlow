@@ -5,6 +5,32 @@ vi.mock('@/hooks/useTranslation', () => ({
   useTranslation: () => (key: string) => key,
 }));
 
+vi.mock('@/context/EnvContext', () => ({
+  useEnv: () => ({ envConfig: {}, appService: null }),
+}));
+
+vi.mock('@/app/reader/hooks/useAudiobookPlayback', () => ({
+  useAudiobookPlayback: () => ({
+    available: false,
+    isActive: false,
+    isPlaying: false,
+    chapters: [],
+    activeIndex: null,
+    rate: 1,
+    isChapterLocal: () => false,
+    downloadAll: vi.fn(),
+    downloading: false,
+    play: vi.fn(),
+    stop: vi.fn(),
+    togglePlay: vi.fn(),
+    backward: vi.fn(),
+    forward: vi.fn(),
+    setRate: vi.fn(),
+    seekTo: vi.fn(),
+    getPlaybackInfo: () => null,
+  }),
+}));
+
 vi.mock('@/store/themeStore', () => ({
   useThemeStore: () => ({ safeAreaInsets: { top: 0, right: 0, bottom: 0, left: 0 } }),
 }));

@@ -10,6 +10,8 @@ import {
   FIXED_LAYOUT_FORMATS,
   ImportBookOptions,
 } from '@/types/book';
+import type { AudiobookManifest } from '@/types/audiobook';
+import { getAudiobookManifestFilename, getAudiobookTotalSec } from '@/utils/audiobook';
 import {
   getDir,
   getLocalBookFilename,
@@ -883,6 +885,39 @@ export async function loadBookConfig(
     return deserializeConfig(str, globalViewSettings, DEFAULT_BOOK_SEARCH_CONFIG);
   } catch {
     return deserializeConfig('{}', globalViewSettings, DEFAULT_BOOK_SEARCH_CONFIG);
+  }
+}
+
+export async function loadAudiobookManifest(
+  fs: FileSystem,
+  book: Book,
+): Promise<AudiobookManifest> {
+  try {
+    const data = await fs.readFile(getAudiobookManifestFilename(book), 'Books', 'text');
+    // On web the virtual FS may return a raw ArrayBuffer even in 'text' mode.
+    const isBuffer = Object.prototype.toString.call(data) === '[object ArrayBuffer]';
+    const text = typeof data === 'string' ? data : isBuffer ? new TextDecoder().decode(data) : '';
+    const manifest = JSON.parse(text) as AudiobookManifest;
+    // Self-heal manifests written before durations were coerced to numbers
+    // (the raw API objects corrupted progress math via 0 + {} => string).
+    manifest.chapters = manifest.chapters.map((chapter) => ({
+      ...chapter,
+      durationSec: Number.isFinite(chapter.durationSec) ? chapter.durationSec : 0,
+    }));
+    if (!Number.isFinite(manifest.totalDurationSec)) {
+      manifest.totalDurationSec = getAudiobookTotalSec(manifest.chapters);
+    }
+    return manifest;
+  } catch {
+    // A manifest-less audiobook is broken; surface an empty chapter list so
+    // the viewer renders an error state instead of crashing.
+    return {
+      schemaVersion: 1,
+      title: book.title,
+      author: book.author,
+      totalDurationSec: 0,
+      chapters: [],
+    };
   }
 }
 

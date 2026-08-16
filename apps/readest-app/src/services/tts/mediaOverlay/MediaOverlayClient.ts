@@ -55,7 +55,7 @@ const isNativeNarrationPlatform = (): boolean =>
 // given a typeless blob URL refuses to decode it ("Format error"), so the type
 // has to be supplied from the file name. Covers the formats EPUB Media Overlays
 // audio realistically uses.
-const AUDIO_MIME_TYPES: Record<string, string> = {
+export const AUDIO_MIME_TYPES: Record<string, string> = {
   mp3: 'audio/mpeg',
   mp4: 'audio/mp4',
   m4a: 'audio/mp4',

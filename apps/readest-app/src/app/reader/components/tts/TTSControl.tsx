@@ -5,11 +5,14 @@ import { useReaderStore } from '@/store/readerStore';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useTTSControl } from '@/app/reader/hooks/useTTSControl';
 import { useTTSDownloads } from '@/app/reader/hooks/useTTSDownloads';
+import { useAudiobookPlayback } from '@/app/reader/hooks/useAudiobookPlayback';
 import { useBookProgress } from '@/store/readerProgressStore';
 import { Insets } from '@/types/misc';
 import { eventDispatcher } from '@/utils/event';
+import { useAudiobookStore } from '@/store/audiobookStore';
 import TTSMiniPlayer from './TTSMiniPlayer';
 import TTSPlayerSheet from './TTSPlayerSheet';
+import type { AudiobookSectionData } from './TTSChaptersView';
 import { useMiniPlayerAutoHide } from './useMiniPlayerAutoHide';
 
 interface TTSControlProps {
@@ -26,6 +29,7 @@ const TTSControl: React.FC<TTSControlProps> = ({ bookKey, gridInsets }) => {
   const backButtonTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [shouldMountBackButton, setShouldMountBackButton] = useState(false);
   const [isBackButtonVisible, setIsBackButtonVisible] = useState(false);
+  const [sheetInitialView, setSheetInitialView] = useState<'chapters' | undefined>(undefined);
 
   const tts = useTTSControl({
     bookKey,
@@ -33,14 +37,38 @@ const TTSControl: React.FC<TTSControlProps> = ({ bookKey, gridInsets }) => {
   });
 
   const downloads = useTTSDownloads(bookKey, tts.getController, showPlayerSheet);
+  const audiobook = useAudiobookPlayback(bookKey);
+  const panelRequest = useAudiobookStore((s) => s.panelRequest[bookKey] ?? 0);
   const activeSectionIndex = useBookProgress(bookKey)?.index ?? null;
 
   const viewSettings = getViewSettings(bookKey);
   const isEink = viewSettings?.isEink ?? false;
   const playerStyle = viewSettings?.ttsPlayerStyle ?? 'full';
   const hasTimeline = tts.ttsClientsInited && tts.handleSupportsPlaybackInfo();
-  const miniPlayerMounted = tts.showIndicator && !showPlayerSheet;
+  const audiobookActive = audiobook.isActive;
+  const miniPlayerMounted = (tts.showIndicator || audiobookActive) && !showPlayerSheet;
   const miniPlayerVisible = useMiniPlayerAutoHide(bookKey, playerStyle, miniPlayerMounted);
+
+  // "Speak" with no downloaded chapters requests the panel: open the sheet
+  // straight on the offline-audio view, where the download button lives.
+  useEffect(() => {
+    if (panelRequest === 0) return;
+    setSheetInitialView('chapters');
+    setShowPlayerSheet(true);
+  }, [panelRequest]);
+
+  const audiobookSection: AudiobookSectionData | null = audiobook.available
+    ? {
+        chapters: audiobook.chapters,
+        activeIndex: audiobook.activeIndex,
+        isChapterLocal: audiobook.isChapterLocal,
+        isChapterDownloading: audiobook.isChapterDownloading,
+        onPlay: (index) => void audiobook.play(index),
+        onDownloadAll: () => void audiobook.downloadAll(),
+        onDownloadChapter: (index) => void audiobook.downloadChapter(index),
+        downloading: audiobook.downloading,
+      }
+    : null;
 
   useEffect(() => {
     if (tts.showBackToCurrentTTSLocation) {
@@ -64,12 +92,18 @@ const TTSControl: React.FC<TTSControlProps> = ({ bookKey, gridInsets }) => {
   const handleExpand = () => {
     // The mini player mounts as soon as the session starts; the full sheet
     // needs initialized clients (voices, timeline), so ignore taps until then.
-    if (!tts.ttsClientsInited) return;
-    tts.refreshTtsLang();
+    // The audiobook player has no clients to initialize.
+    if (!tts.ttsClientsInited && !audiobookActive) return;
+    if (!audiobookActive) tts.refreshTtsLang();
+    setSheetInitialView(undefined);
     setShowPlayerSheet(true);
   };
 
   const handleStop = () => {
+    if (audiobookActive) {
+      audiobook.stop();
+      return;
+    }
     eventDispatcher.dispatch('tts-stop', { bookKey });
   };
 
@@ -104,47 +138,54 @@ const TTSControl: React.FC<TTSControlProps> = ({ bookKey, gridInsets }) => {
       {miniPlayerMounted && (
         <TTSMiniPlayer
           bookKey={bookKey}
-          isPlaying={tts.isPlaying}
+          isPlaying={audiobookActive ? audiobook.isPlaying : tts.isPlaying}
           isEink={isEink}
           visible={miniPlayerVisible}
-          hasTimeline={hasTimeline}
-          timeoutTimestamp={tts.timeoutTimestamp}
-          chapterRemainingSec={tts.chapterRemainingSec}
+          hasTimeline={audiobookActive ? true : hasTimeline}
+          timeoutTimestamp={audiobookActive ? 0 : tts.timeoutTimestamp}
+          chapterRemainingSec={audiobookActive ? null : tts.chapterRemainingSec}
           gridInsets={gridInsets}
-          onTogglePlay={tts.handleTogglePlay}
-          onBackward={tts.handleBackward}
-          onForward={tts.handleForward}
+          onTogglePlay={audiobookActive ? () => void audiobook.togglePlay() : tts.handleTogglePlay}
+          onBackward={audiobookActive ? () => audiobook.backward() : tts.handleBackward}
+          onForward={audiobookActive ? () => audiobook.forward() : tts.handleForward}
           onStop={handleStop}
           onExpand={handleExpand}
-          onGetPlaybackInfo={tts.handleGetPlaybackInfo}
+          onGetPlaybackInfo={
+            audiobookActive ? audiobook.getPlaybackInfo : tts.handleGetPlaybackInfo
+          }
         />
       )}
-      {tts.ttsClientsInited && showPlayerSheet && (
+      {(tts.ttsClientsInited || audiobookActive || audiobook.available) && showPlayerSheet && (
         <TTSPlayerSheet
           bookKey={bookKey}
           isOpen={showPlayerSheet}
           ttsLang={tts.ttsLang}
-          isPlaying={tts.isPlaying}
-          hasTimeline={hasTimeline}
+          isPlaying={audiobookActive ? audiobook.isPlaying : tts.isPlaying}
+          hasTimeline={audiobookActive ? true : hasTimeline}
           timeoutOption={tts.timeoutOption}
-          timeoutTimestamp={tts.timeoutTimestamp}
-          chapterRemainingSec={tts.chapterRemainingSec}
+          timeoutTimestamp={audiobookActive ? 0 : tts.timeoutTimestamp}
+          chapterRemainingSec={audiobookActive ? null : tts.chapterRemainingSec}
           onClose={() => setShowPlayerSheet(false)}
-          onTogglePlay={tts.handleTogglePlay}
-          onBackward={tts.handleBackward}
-          onForward={tts.handleForward}
-          onSetRate={tts.handleSetRate}
+          onTogglePlay={audiobookActive ? () => void audiobook.togglePlay() : tts.handleTogglePlay}
+          onBackward={audiobookActive ? () => audiobook.backward() : tts.handleBackward}
+          onForward={audiobookActive ? () => audiobook.forward() : tts.handleForward}
+          onSetRate={audiobookActive ? audiobook.setRate : tts.handleSetRate}
           onSetSentenceGap={tts.handleSetSentenceGap}
           onSetParagraphGap={tts.handleSetParagraphGap}
           onGetVoices={tts.handleGetVoices}
           onSetVoice={tts.handleSetVoice}
           onGetVoiceId={tts.handleGetVoiceId}
           onSelectTimeout={tts.handleSelectTimeout}
-          onSeek={tts.handleSeekTo}
-          onSeekPreview={tts.handleSeekPreview}
-          onGetPlaybackInfo={tts.handleGetPlaybackInfo}
+          onSeek={audiobookActive ? audiobook.seekTo : tts.handleSeekTo}
+          onSeekPreview={audiobookActive ? () => {} : tts.handleSeekPreview}
+          onGetPlaybackInfo={
+            audiobookActive ? audiobook.getPlaybackInfo : tts.handleGetPlaybackInfo
+          }
           downloads={downloads}
           activeSectionIndex={activeSectionIndex}
+          isAudiobook={audiobookActive}
+          initialView={sheetInitialView}
+          audiobook={audiobookSection}
         />
       )}
     </>

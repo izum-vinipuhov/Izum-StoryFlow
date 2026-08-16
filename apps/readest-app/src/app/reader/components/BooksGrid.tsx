@@ -15,6 +15,7 @@ import { useContentInsets } from '../hooks/useContentInsets';
 import SearchResultsNav from './sidebar/SearchResultsNav';
 import BooknotesNav from './sidebar/BooknotesNav';
 import FoliateViewer from './FoliateViewer';
+import AudiobookViewer from './AudiobookViewer';
 import SectionInfo from './SectionInfo';
 import HeaderBar from './HeaderBar';
 import PageNavigationButtons from './PageNavigationButtons';
@@ -135,7 +136,38 @@ const BookCellInner: React.FC<BookCellProps> = ({
     [bookKey, setDropdownOpenForBook],
   );
 
-  if (!book || !config || !bookDoc || !viewSettings || !viewState) return null;
+  if (!book || !config || !viewSettings || !viewState) return null;
+
+  // Audiobooks have no document: the foliate chrome (pagination, search,
+  // annotations, TTS) does not apply, only the header bar + audio player.
+  if (book.format === 'AUDIOBOOK') {
+    return (
+      <div
+        id={`gridcell-${bookKey}`}
+        data-view-transition-root=''
+        className={clsx(
+          'relative h-full w-full overflow-hidden',
+          appServiceHasRoundedWindow && 'rounded-window',
+        )}
+      >
+        <HeaderBar
+          bookKey={bookKey}
+          gridInsets={gridInsets}
+          screenInsets={screenInsets}
+          bookTitle={book.title}
+          isTopLeft={index === 0}
+          isHoveredAnim={isHoveredAnim}
+          onCloseBook={onCloseBook}
+          onGoToLibrary={onGoToLibrary}
+          onDropdownOpenChange={onDropdownOpenChange}
+        />
+        <div className='absolute inset-0'>
+          <AudiobookViewer key={viewState.viewerKey} bookKey={bookKey} />
+        </div>
+      </div>
+    );
+  }
+  if (!bookDoc) return null;
 
   const { section, pageinfo, sectionLabel } = progress || {};
   const viewerKey = viewState.viewerKey;

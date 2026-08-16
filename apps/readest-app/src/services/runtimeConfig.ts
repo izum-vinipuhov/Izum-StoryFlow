@@ -6,6 +6,7 @@ export interface ReadestRuntimeConfig {
   storageFixedQuota?: number;
   translationFixedQuota?: number;
   fontBaseUrl?: string;
+  premiumEnabled?: boolean;
 }
 
 declare global {
@@ -50,4 +51,8 @@ export const getServerRuntimeConfig = (): ReadestRuntimeConfig => ({
   // and an empty string would build root-relative font URLs.
   fontBaseUrl:
     process.env['FONT_BASE_URL'] || process.env['NEXT_PUBLIC_FONT_BASE_URL'] || undefined,
+  // Self-hosted premium switch: when true every account is treated as the
+  // top plan (see utils/access.ts), ungating all premium features.
+  premiumEnabled:
+    (process.env['PREMIUM_ENABLED'] ?? process.env['NEXT_PUBLIC_PREMIUM_ENABLED']) === 'true',
 });
