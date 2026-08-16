@@ -1,6 +1,7 @@
 import { SystemSettings } from './settings';
 import type { RssFeed } from '@/types/rss';
 import { Book, BookConfig, BookContent, ImportBookOptions, ViewSettings } from './book';
+import { AudiobookManifest } from './audiobook';
 import { BookMetadata } from '@/libs/document';
 import type { BookNav } from '@/services/nav';
 import { ProgressHandler } from '@/utils/transfer';
@@ -188,6 +189,16 @@ export interface AppService {
     redownload?: boolean,
     onProgress?: ProgressHandler,
   ): Promise<void>;
+  downloadAttachedAudiobook(
+    book: Book,
+    onProgress?: ProgressHandler,
+    downloadChapters?: boolean,
+  ): Promise<AudiobookManifest | null>;
+  downloadAttachedAudiobookChapter(
+    book: Book,
+    chapterFile: string,
+    onProgress?: ProgressHandler,
+  ): Promise<void>;
   uploadFileToCloud(
     lfp: string,
     cfp: string,
@@ -219,6 +230,7 @@ export interface AppService {
   isBookAvailable(book: Book): Promise<boolean>;
   getBookFileSize(book: Book): Promise<number | null>;
   loadBookConfig(book: Book, settings: SystemSettings): Promise<BookConfig>;
+  loadAudiobookManifest(book: Book): Promise<AudiobookManifest>;
   fetchBookDetails(book: Book): Promise<BookMetadata>;
   saveBookConfig(book: Book, config: BookConfig, settings?: SystemSettings): Promise<void>;
   loadBookNav(book: Book): Promise<BookNav | null>;

@@ -16,7 +16,8 @@ export type BookFormat =
   | 'FB2'
   | 'FBZ'
   | 'TXT'
-  | 'MD';
+  | 'MD'
+  | 'AUDIOBOOK';
 export type BookNoteType = 'bookmark' | 'annotation' | 'excerpt';
 export type ReadingStatus = 'unread' | 'reading' | 'finished' | 'abandoned';
 export type HighlightStyle = 'highlight' | 'underline' | 'squiggly';
@@ -450,6 +451,12 @@ export interface ProofreadRulesConfig {
 
 export interface ViewSettingsConfig {
   isGlobal: boolean;
+  /**
+   * Attached-audiobook playback position. Lives in viewSettings (not a
+   * top-level BookConfig field) because the view_settings column is the part
+   * of the config that survives the configs sync round-trip.
+   */
+  audioPosition?: { chapterIndex: number; positionSec: number };
 }
 
 export interface ViewSettings
@@ -562,6 +569,8 @@ export interface BookConfig {
   xpointer?: string; // XPointer of the current location (for Koreader interoperability)
   booknotes?: BookNote[];
   rsvpPosition?: { cfi: string; wordText: string };
+  /** AUDIOBOOK-only playback position (chapter index + seconds within it). */
+  audioPosition?: { chapterIndex: number; positionSec: number };
   searchConfig?: Partial<BookSearchConfig>;
   viewSettings?: Partial<ViewSettings>;
 

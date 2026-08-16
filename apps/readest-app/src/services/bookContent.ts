@@ -2,6 +2,7 @@ import type { Book } from '@/types/book';
 import type { FileSystem } from '@/types/system';
 import { EXTS } from '@/libs/document';
 import { getDir, getLocalBookFilename } from '@/utils/book';
+import { getAudiobookManifestFilename } from '@/utils/audiobook';
 import { isContentURI, isValidURL } from '@/utils/misc';
 import { isPseStreamFileName } from './opds/pseStream';
 import { isFeedBookUrl } from '@/services/rss/feedBookUrl';
@@ -44,6 +45,16 @@ export async function resolveBookContentSource(
   fs: FileSystem,
   book: Book,
 ): Promise<BookContentSource> {
+  // Audiobooks are multi-file: the chapters manifest is the book's entry
+  // point (no single book file exists).
+  if (book.format === 'AUDIOBOOK') {
+    const manifestPath = getAudiobookManifestFilename(book);
+    if (await fs.exists(manifestPath, 'Books')) {
+      return { kind: 'managed', path: manifestPath, base: 'Books' };
+    }
+    return (await resolveLegacyManagedSource(fs, book)) ?? { kind: 'missing' };
+  }
+
   // Prefer the managed copy when it exists; book.filePath is device-local and
   // can outlive a prior in-place/import mode.
   const managedPath = getLocalBookFilename(book);

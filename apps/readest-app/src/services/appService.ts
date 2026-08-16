@@ -16,6 +16,7 @@ import {
 import { DatabaseOpts, DatabaseService } from '@/types/database';
 import { SchemaType } from '@/services/database/migrate';
 import { Book, BookConfig, BookContent, ImportBookOptions, ViewSettings } from '@/types/book';
+import type { AudiobookManifest } from '@/types/audiobook';
 import type { BookNav } from '@/services/nav';
 import { getLibraryFilename, getLibraryBackupFilename } from '@/utils/book';
 import { getDirPath } from '@/utils/path';
@@ -434,6 +435,36 @@ export abstract class BaseAppService implements AppService {
     return CloudSvc.downloadBookCovers(this, this.fs, this.localBooksDir, books);
   }
 
+  async downloadAttachedAudiobook(
+    book: Book,
+    onProgress?: ProgressHandler,
+    downloadChapters?: boolean,
+  ): Promise<AudiobookManifest | null> {
+    return CloudSvc.downloadAttachedAudiobook(
+      this,
+      this.fs,
+      this.localBooksDir,
+      book,
+      onProgress,
+      downloadChapters,
+    );
+  }
+
+  async downloadAttachedAudiobookChapter(
+    book: Book,
+    chapterFile: string,
+    onProgress?: ProgressHandler,
+  ): Promise<void> {
+    return CloudSvc.downloadAttachedAudiobookChapter(
+      this,
+      this.fs,
+      this.localBooksDir,
+      book,
+      chapterFile,
+      onProgress,
+    );
+  }
+
   async downloadBook(
     book: Book,
     onlyCover = false,
@@ -483,6 +514,10 @@ export abstract class BaseAppService implements AppService {
 
   async loadBookConfig(book: Book, settings: SystemSettings): Promise<BookConfig> {
     return BookSvc.loadBookConfig(this.fs, book, settings);
+  }
+
+  async loadAudiobookManifest(book: Book): Promise<AudiobookManifest> {
+    return BookSvc.loadAudiobookManifest(this.fs, book);
   }
 
   async fetchBookDetails(book: Book) {

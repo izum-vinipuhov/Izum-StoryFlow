@@ -2,6 +2,8 @@ import clsx from 'clsx';
 import { MdLink, MdMenuBook, MdRssFeed } from 'react-icons/md';
 import { LuLibrary } from 'react-icons/lu';
 import { IoFileTray } from 'react-icons/io5';
+import { PiGear } from 'react-icons/pi';
+import { RiBook2Fill } from 'react-icons/ri';
 import { useEnv } from '@/context/EnvContext';
 import { useTranslation } from '@/hooks/useTranslation';
 import MenuItem from '@/components/MenuItem';
@@ -14,6 +16,8 @@ export interface ImportMenuProps {
   onImportBooksFromDirectory?: () => void;
   onImportBookFromUrl?: () => void;
   onImportBookFromNovelUrl?: () => void;
+  onImportBookFromYandexUrl?: () => void;
+  onOpenYandexToken?: () => void;
   onOpenCatalogManager: () => void;
   onOpenFeeds: () => void;
 }
@@ -25,6 +29,8 @@ const ImportMenu: React.FC<ImportMenuProps> = ({
   onImportBooksFromDirectory,
   onImportBookFromUrl,
   onImportBookFromNovelUrl,
+  onImportBookFromYandexUrl,
+  onOpenYandexToken,
   onOpenCatalogManager,
   onOpenFeeds,
 }) => {
@@ -58,6 +64,16 @@ const ImportMenu: React.FC<ImportMenuProps> = ({
 
   const handleOpenFeeds = () => {
     onOpenFeeds();
+    setIsDropdownOpen?.(false);
+  };
+
+  const handleImportFromYandexUrl = () => {
+    onImportBookFromYandexUrl?.();
+    setIsDropdownOpen?.(false);
+  };
+
+  const handleOpenYandexToken = () => {
+    onOpenYandexToken?.();
     setIsDropdownOpen?.(false);
   };
 
@@ -100,6 +116,25 @@ const ImportMenu: React.FC<ImportMenuProps> = ({
         Icon={<MdRssFeed className='h-5 w-5' />}
         onClick={handleOpenFeeds}
       />
+      {onImportBookFromYandexUrl && (
+        <MenuItem
+          label={_('Yandex URL')}
+          Icon={<RiBook2Fill className='h-5 w-5' />}
+          onClick={handleImportFromYandexUrl}
+          siblings={
+            onOpenYandexToken ? (
+              <button
+                aria-label={_('Yandex Token')}
+                title={_('Yandex Token')}
+                className='hover:bg-base-300 text-base-content/70 mx-1 rounded-md px-2'
+                onClick={handleOpenYandexToken}
+              >
+                <PiGear size={16} />
+              </button>
+            ) : undefined
+          }
+        />
+      )}
       <MenuItem
         label={appService?.isOnlineCatalogsAccessible ? _('Online Library') : _('OPDS Catalogs')}
         Icon={<LuLibrary className='h-5 w-5' />}

@@ -13,14 +13,32 @@ interface Token {
   [key: string]: string | number;
 }
 
+/**
+ * Self-hosted premium switch. With `PREMIUM_ENABLED=true` every account is
+ * treated as {@link PREMIUM_PLAN} regardless of the JWT plan, ungating every
+ * premium feature (cloud sync, offline TTS cache, email-in) and the top-plan
+ * quotas. The flag reaches the browser via the runtime config route
+ * (`/runtime-config.js`) and the server API routes via the env var directly.
+ * Off by default.
+ */
+export const PREMIUM_PLAN: UserPlan = 'pro';
+
+export const isPremiumEnabled = (): boolean => {
+  const runtimeConfig = getRuntimeConfig();
+  return runtimeConfig?.premiumEnabled ?? process.env['PREMIUM_ENABLED'] === 'true';
+};
+
+const resolvePlan = (data: Token): UserPlan =>
+  isPremiumEnabled() ? PREMIUM_PLAN : data['plan'] || 'free';
+
 export const getSubscriptionPlan = (token: string): UserPlan => {
   const data = jwtDecode<Token>(token) || {};
-  return data['plan'] || 'free';
+  return resolvePlan(data);
 };
 
 export const getUserProfilePlan = (token: string): UserPlan => {
   const data = jwtDecode<Token>(token) || {};
-  let plan = data['plan'] || 'free';
+  let plan = resolvePlan(data);
   if (plan === 'free') {
     const purchasedQuota = data['storage_purchased_bytes'] || 0;
     if (purchasedQuota > 0) {
@@ -102,7 +120,7 @@ export const STORAGE_QUOTA_GRACE_BYTES = 10 * 1024 * 1024; // 10 MB grace
 
 export const getStoragePlanData = (token: string) => {
   const data = jwtDecode<Token>(token) || {};
-  const plan = data['plan'] || 'free';
+  const plan = resolvePlan(data);
   const usage = data['storage_usage_bytes'] || 0;
   const purchasedQuota = data['storage_purchased_bytes'] || 0;
   const runtimeConfig = getRuntimeConfig();
@@ -129,7 +147,7 @@ export const getTranslationQuota = (plan: UserPlan): number => {
 
 export const getTranslationPlanData = (token: string) => {
   const data = jwtDecode<Token>(token) || {};
-  const plan: UserPlan = data['plan'] || 'free';
+  const plan = resolvePlan(data);
   const usage = getDailyUsage() || 0;
   const quota = getTranslationQuota(plan);
 
@@ -142,7 +160,7 @@ export const getTranslationPlanData = (token: string) => {
 
 export const getDailyTranslationPlanData = (token: string) => {
   const data = jwtDecode<Token>(token) || {};
-  const plan = data['plan'] || 'free';
+  const plan = resolvePlan(data);
   const quota = getTranslationQuota(plan);
 
   return {

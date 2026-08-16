@@ -54,6 +54,39 @@ if (typeof window !== 'undefined' && !window.matchMedia) {
     }) as MediaQueryList;
 }
 
+// Node >= 22 defines a `localStorage` global of its own (undefined unless
+// --localstorage-file is passed), and this vitest/jsdom combination leaves
+// `window.localStorage` undefined as well. Provide one shared in-memory
+// Storage so module-level `localStorage` reads work everywhere.
+const createMemoryStorage = (): Storage => {
+  const store = new Map<string, string>();
+  return {
+    get length() {
+      return store.size;
+    },
+    clear: () => store.clear(),
+    getItem: (key: string) => (store.has(key) ? store.get(key)! : null),
+    key: (index: number) => [...store.keys()][index] ?? null,
+    removeItem: (key: string) => void store.delete(key),
+    setItem: (key: string, value: string) => void store.set(key, String(value)),
+  } as Storage;
+};
+
+if (typeof localStorage === 'undefined') {
+  Object.defineProperty(globalThis, 'localStorage', {
+    value: createMemoryStorage(),
+    writable: true,
+    configurable: true,
+  });
+}
+if (typeof window !== 'undefined' && typeof window.localStorage === 'undefined') {
+  Object.defineProperty(window, 'localStorage', {
+    value: globalThis.localStorage,
+    writable: true,
+    configurable: true,
+  });
+}
+
 // jsdom reports these unimplemented methods to its virtual console even when
 // the calling test passes. Tests that need media behavior replace them locally.
 if (typeof HTMLMediaElement !== 'undefined') {

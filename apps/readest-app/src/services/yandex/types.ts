@@ -1,0 +1,42 @@
+export interface YandexPerson {
+  name: string;
+}
+
+export interface YandexCover {
+  large?: string;
+  small?: string;
+}
+
+export interface YandexBookInfo {
+  title: string;
+  cover?: YandexCover;
+  /** A plain string on /books/{uuid}, unlike the audiobook's array shape. */
+  authors?: Array<YandexPerson | string> | string;
+}
+
+export interface YandexAudiobookInfo {
+  title: string;
+  cover?: YandexCover;
+  /** Total duration in seconds. */
+  duration?: number;
+  authors?: YandexPerson[];
+  narrators?: YandexPerson[];
+  /** Uuids of the linked ebook variant(s) — a separate Yandex resource. */
+  linked_book_uuids?: string[];
+}
+
+export interface YandexTrack {
+  /** Chapter number (the API numbers tracks from 1). */
+  number: number;
+  title?: string;
+  /** Chapter duration — an object like `{seconds, offset, preview}`. */
+  duration?: number | { seconds?: number; offset?: number; preview?: number };
+  offline?: {
+    min_bit_rate?: { url: string };
+    max_bit_rate?: { url: string };
+  };
+}
+
+export interface YandexTracksResponse {
+  tracks?: YandexTrack[];
+}

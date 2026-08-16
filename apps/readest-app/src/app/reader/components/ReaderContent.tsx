@@ -283,7 +283,10 @@ const ReaderContent: React.FC<{ ids?: string; settings: SystemSettings }> = ({ i
   if (!bookKeys || bookKeys.length === 0) return null;
   const bookData = getBookData(bookKeys[0]!);
   const viewSettings = getViewSettings(bookKeys[0]!);
-  if (!bookData || !bookData.book || !bookData.bookDoc || !viewSettings) {
+  // Audiobooks have no BookDoc — their bookData carries the chapters manifest
+  // instead, so the doc gate below must not block them.
+  const needsBookDoc = bookData?.book?.format !== 'AUDIOBOOK';
+  if (!bookData || !bookData.book || !viewSettings || (needsBookDoc && !bookData.bookDoc)) {
     setTimeout(() => setLoading(true), 200);
     return (
       loading &&

@@ -4,11 +4,18 @@ import { useRouter } from 'next/navigation';
 import { PiUserCircle, PiUserCircleCheck, PiGear } from 'react-icons/pi';
 import { PiSun, PiMoon } from 'react-icons/pi';
 import { TbSunMoon } from 'react-icons/tb';
-import { MdCloudSync, MdSync, MdSyncProblem, MdOutlineSensors } from 'react-icons/md';
+import {
+  MdCloudDownload,
+  MdCloudSync,
+  MdSync,
+  MdSyncProblem,
+  MdOutlineSensors,
+} from 'react-icons/md';
 
 import { isTauriAppPlatform, isWebAppPlatform } from '@/services/environment';
 import { DOWNLOAD_READEST_URL } from '@/services/constants';
 import { setBackupDialogVisible } from '@/app/library/components/BackupWindow';
+import { setYandexDownloadsPanelVisible } from '@/app/library/components/YandexDownloadsPanel';
 import { setCacheManagerDialogVisible } from '@/app/library/components/CacheManagerWindow';
 import { useAuth } from '@/context/AuthContext';
 import { useEnv } from '@/context/EnvContext';
@@ -113,6 +120,11 @@ const SettingsMenu: React.FC<SettingsMenuProps> = ({ onPullLibrary, setIsDropdow
 
   const showAboutReadest = () => {
     setAboutDialogVisible(true);
+    setIsDropdownOpen?.(false);
+  };
+
+  const handleOpenYandexDownloads = () => {
+    setYandexDownloadsPanelVisible(true);
     setIsDropdownOpen?.(false);
   };
 
@@ -488,6 +500,12 @@ const SettingsMenu: React.FC<SettingsMenuProps> = ({ onPullLibrary, setIsDropdow
       {user && userProfilePlan === 'free' && (
         <MenuItem label={_('Upgrade to Readest Premium')} onClick={handleUpgrade} />
       )}
+      <MenuItem
+        label={_('Yandex Downloads')}
+        Icon={<MdCloudDownload />}
+        onClick={handleOpenYandexDownloads}
+      />
+      <hr aria-hidden='true' className='border-base-200 my-1' />
       {isWebAppPlatform() && <MenuItem label={_('Download Readest')} onClick={downloadReadest} />}
       <MenuItem label={_('About Readest')} onClick={showAboutReadest} />
     </Menu>

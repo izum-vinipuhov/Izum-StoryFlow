@@ -309,6 +309,27 @@ export const useProgressSync = (bookKey: string) => {
           });
         }
       }
+      // The attached-audiobook playback position travels with the config
+      // (it rides viewSettings, which survives the sync round-trip): adopt
+      // the remote one when this device has none or the remote is newer.
+      const remoteAudioPosition = syncedConfig.viewSettings?.audioPosition;
+      if (remoteAudioPosition) {
+        const localAudioPosition = config.viewSettings?.audioPosition ?? config.audioPosition;
+        const remoteNewer = (syncedConfig.updatedAt ?? 0) > (config.updatedAt ?? 0);
+        if (!localAudioPosition || remoteNewer) {
+          await saveConfig(
+            envConfig,
+            bookKey,
+            {
+              ...config,
+              audioPosition: remoteAudioPosition,
+              viewSettings: { ...config.viewSettings, audioPosition: remoteAudioPosition },
+              updatedAt: Date.now(),
+            },
+            settings,
+          );
+        }
+      }
       // Two view settings cross devices; everything else in viewSettings stays
       // device-local. Both merges accumulate into one updatedViewSettings so a
       // pull that moves both still writes the config once.

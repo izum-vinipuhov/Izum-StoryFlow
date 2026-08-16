@@ -18,16 +18,30 @@ import type { DBSendInboxItem } from '@/types/sendRecords';
 const DRAIN_INTERVAL_MS = 60_000;
 const DEVICE_ID_KEY = 'readest-send-device-id';
 
+// crypto.randomUUID is a secure-context API: over plain HTTP on a
+// non-localhost origin it is undefined. Fall back to a random v4 UUID so the
+// inbox drain keeps working in self-hosted LAN setups.
+const randomUUID = (): string => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+};
+
 function getDeviceId(): string {
   try {
     let id = localStorage.getItem(DEVICE_ID_KEY);
     if (!id) {
-      id = crypto.randomUUID();
+      id = randomUUID();
       localStorage.setItem(DEVICE_ID_KEY, id);
     }
     return id;
   } catch {
-    return crypto.randomUUID();
+    return randomUUID();
   }
 }
 

@@ -116,6 +116,9 @@ import ImportFromFolderDialog, {
 } from './components/ImportFromFolderDialog';
 import ImportFromUrlDialog from './components/ImportFromUrlDialog';
 import ImportNovelDialog from './components/ImportNovelDialog';
+import YandexImportDialog from './components/YandexImportDialog';
+import YandexTokenDialog, { setYandexTokenDialogVisible } from './components/YandexTokenDialog';
+import YandexDownloadsPanel from './components/YandexDownloadsPanel';
 import NowPlayingBar from './components/NowPlayingBar';
 import { ttsSessionManager } from '@/services/tts';
 import { clipPageWithSignInFallback } from '@/services/send/clipSignIn';
@@ -252,6 +255,7 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
   const [showFeeds, setShowFeeds] = useState(false);
   const [showAddFeed, setShowAddFeed] = useState(false);
   const [showImportFromUrl, setShowImportFromUrl] = useState(false);
+  const [showYandexImport, setShowYandexImport] = useState(false);
   const [showImportNovel, setShowImportNovel] = useState(false);
   const [importMenuAnchor, setImportMenuAnchor] = useState<HTMLElement | null>(null);
   const [loading, setLoading] = useState(false);
@@ -1896,6 +1900,8 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
           onImportBookFromNovelUrl={
             isTauriAppPlatform() ? () => setShowImportNovel(true) : undefined
           }
+          onImportBookFromYandexUrl={() => setShowYandexImport(true)}
+          onOpenYandexToken={() => setYandexTokenDialogVisible(true)}
           onOpenCatalogManager={handleShowOPDSDialog}
           onOpenFeeds={handleShowFeeds}
           onToggleSelectMode={() => handleSetSelectMode(!isSelectMode)}
@@ -2063,6 +2069,8 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
           onImportBookFromNovelUrl={
             isTauriAppPlatform() ? () => setShowImportNovel(true) : undefined
           }
+          onImportBookFromYandexUrl={() => setShowYandexImport(true)}
+          onOpenYandexToken={() => setYandexTokenDialogVisible(true)}
           onOpenCatalogManager={handleShowOPDSDialog}
           onOpenFeeds={handleShowFeeds}
         />
@@ -2173,6 +2181,9 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
         onClose={() => setShowImportNovel(false)}
         onImport={handleImportNovelFile}
       />
+      <YandexImportDialog isOpen={showYandexImport} onClose={() => setShowYandexImport(false)} />
+      <YandexTokenDialog />
+      <YandexDownloadsPanel />
       <ClipSignInAlert />
       <Toast />
     </div>

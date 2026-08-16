@@ -129,6 +129,11 @@ export interface ReadwiseSettings {
   baseUrl?: string;
 }
 
+export interface YandexBooksSettings {
+  /** Raw Yandex Books OAuth token (y0_ prefix), sent as the auth-token header. */
+  accessToken: string;
+}
+
 export interface HardcoverSettings {
   enabled: boolean;
   accessToken: string;
@@ -487,6 +492,7 @@ export interface SystemSettings {
   bookorbit: BookOrbitSettings;
   readwise: ReadwiseSettings;
   hardcover: HardcoverSettings;
+  yandexBooks: YandexBooksSettings;
   /** Optional by design — see {@link ReadestCloudSettings}. Never defaulted. */
   readestCloud?: ReadestCloudSettings;
   webdav: WebDAVSettings;

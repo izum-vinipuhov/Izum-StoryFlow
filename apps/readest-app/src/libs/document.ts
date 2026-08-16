@@ -137,6 +137,7 @@ export const EXTS: Record<BookFormat, string> = {
   FBZ: 'fbz',
   TXT: 'txt',
   MD: 'md',
+  AUDIOBOOK: 'm4a',
 };
 
 export const MIMETYPES: Record<BookFormat, string[]> = {
@@ -150,6 +151,7 @@ export const MIMETYPES: Record<BookFormat, string[]> = {
   FBZ: ['application/x-zip-compressed-fb2', 'application/zip'],
   TXT: ['text/plain'],
   MD: ['text/markdown', 'text/x-markdown'],
+  AUDIOBOOK: ['audio/mp4', 'audio/x-m4a'],
 };
 
 export interface DocumentLoaderOptions {

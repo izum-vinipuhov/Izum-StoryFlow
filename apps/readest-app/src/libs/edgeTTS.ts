@@ -379,6 +379,8 @@ export class EdgeSpeechTTS {
   async #fetchEdgeSpeechHttp({ lang, text, voice, rate }: EdgeTTSPayload): Promise<Response> {
     const url = getAPIBaseUrl() + '/tts/edge';
 
+    // fetch has no default timeout; a hung response (proxy stall, dropped
+    // upstream connection) would wedge the caller exactly like a hung socket.
     const response = await fetchWithAuth(url, {
       method: 'POST',
       headers: {
@@ -390,6 +392,7 @@ export class EdgeSpeechTTS {
         rate,
         lang,
       }),
+      signal: AbortSignal.timeout(WS_INACTIVITY_TIMEOUT_MS),
     });
 
     if (!response.ok) {
@@ -722,23 +725,68 @@ export class EdgeSpeechTTS {
 
         let audioData = new ArrayBuffer(0);
         const boundaries: TTSWordBoundary[] = [];
+        let settled = false;
+        let inactivityTimer: ReturnType<typeof setTimeout> | null = null;
+
+        const cleanup = () => {
+          if (inactivityTimer !== null) {
+            clearTimeout(inactivityTimer);
+            inactivityTimer = null;
+          }
+        };
+        const settle = (complete: () => void) => {
+          if (settled) return;
+          settled = true;
+          cleanup();
+          complete();
+        };
+        // Frames stream steadily during synthesis, so prolonged silence means
+        // a half-open socket (a silently dropped or blocked connection) that
+        // will never error or close on its own. Without this the promise never
+        // settles and wedges the whole speak pipeline: live playback goes
+        // silent and the offline-audio download sticks at "0/0" (#5230 was the
+        // Tauri-transport variant of the same failure).
+        const armInactivityTimer = () => {
+          if (inactivityTimer !== null) clearTimeout(inactivityTimer);
+          inactivityTimer = setTimeout(() => {
+            settle(() => {
+              try {
+                ws.close();
+              } catch {
+                // The socket may already be gone; the rejection is the fix.
+              }
+              reject(new Error('WebSocket timed out waiting for audio.'));
+            });
+          }, WS_INACTIVITY_TIMEOUT_MS);
+        };
 
         ws.addEventListener('open', () => {
+          if (settled) return;
+          armInactivityTimer();
           ws.send(config);
           ws.send(content);
         });
 
         ws.addEventListener('message', (event: WebSocket.MessageEvent) => {
+          if (settled) return;
+          armInactivityTimer();
           if (typeof event.data === 'string') {
             const { headers, body } = getHeadersAndData(event.data);
             if (headers['Path'] === 'audio.metadata') {
               boundaries.push(...parseAudioMetadataBody(body.trim()));
             } else if (headers['Path'] === 'turn.end') {
-              ws.close();
-              if (!audioData.byteLength) {
-                return reject(new Error('No audio data received.'));
-              }
-              resolve({ response: new Response(audioData), boundaries });
+              settle(() => {
+                try {
+                  ws.close();
+                } catch {
+                  // ignore close failures
+                }
+                if (!audioData.byteLength) {
+                  reject(new Error('No audio data received.'));
+                  return;
+                }
+                resolve({ response: new Response(audioData), boundaries });
+              });
             }
           } else if (event.data instanceof ArrayBuffer) {
             const dataView = new DataView(event.data);
@@ -754,14 +802,18 @@ export class EdgeSpeechTTS {
         });
 
         ws.addEventListener('close', () => {
-          if (!audioData.byteLength) {
-            reject(new Error('No audio data received.'));
-          }
+          // A close before turn.end is a failed synthesis even when partial
+          // audio arrived; leaving the promise open wedges the caller.
+          settle(() => reject(new Error('WebSocket closed before audio completed.')));
         });
 
         ws.addEventListener('error', () => {
-          reject(new Error('WebSocket error occurred.'));
+          settle(() => reject(new Error('WebSocket error occurred.')));
         });
+
+        // Armed from construction: a connection that never opens (blocked
+        // silently) must still settle so the caller's fallback/retry can run.
+        armInactivityTimer();
       });
     }
   }

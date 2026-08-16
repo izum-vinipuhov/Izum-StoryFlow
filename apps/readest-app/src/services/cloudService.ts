@@ -7,6 +7,12 @@ import {
   getCoverFilename,
 } from '@/utils/book';
 import {
+  getAttachedAudiobookDir,
+  getAttachedAudiobookManifestFilename,
+  getAudiobookManifestFilename,
+} from '@/utils/audiobook';
+import type { AudiobookManifest } from '@/types/audiobook';
+import {
   downloadFile,
   uploadFile,
   uploadReplicaFile,
@@ -74,7 +80,23 @@ export async function deleteBook(
     }
   }
   if ((deleteAction === 'cloud' || deleteAction === 'both') && book.uploadedAt) {
-    const fps = [getRemoteBookFilename(book), getCoverFilename(book)];
+    const fps = [getCoverFilename(book)];
+    if (book.format === 'AUDIOBOOK') {
+      // Multi-file book: enumerate the local manifest to drop every chapter.
+      const manifest = await loadLocalAudiobookManifest(fs, book);
+      if (manifest) {
+        fps.push(getAudiobookManifestFilename(book));
+        fps.push(...manifest.chapters.map((chapter) => chapter.file));
+      }
+    } else {
+      fps.push(getRemoteBookFilename(book));
+      // Drop the attached audiobook blobs too.
+      const attachedManifest = await loadAttachedAudiobookManifest(fs, book);
+      if (attachedManifest) {
+        fps.push(getAttachedAudiobookManifestFilename(book.hash));
+        fps.push(...attachedManifest.chapters.map((chapter) => chapter.file));
+      }
+    }
     for (const fp of fps) {
       const cfp = `${CLOUD_BOOKS_SUBDIR}/${fp}`;
       try {
@@ -86,6 +108,56 @@ export async function deleteBook(
     book.uploadedAt = null;
   }
 }
+
+// On web the virtual FS stores binary writes as ArrayBuffers and readFile's
+// 'text' mode hands them back raw — JSON.parse(ArrayBuffer) throws, so
+// normalize to a string before parsing. The tag check is realm-safe
+// (`instanceof` fails across jsdom/node realms in tests and iframes).
+const isArrayBuffer = (data: unknown): data is ArrayBuffer =>
+  Object.prototype.toString.call(data) === '[object ArrayBuffer]';
+
+const decodeText = (data: string | ArrayBuffer): string | null => {
+  if (typeof data === 'string') return data;
+  if (isArrayBuffer(data)) return new TextDecoder().decode(data);
+  return null;
+};
+
+const parseManifestText = (data: string | ArrayBuffer): AudiobookManifest | null => {
+  const text = decodeText(data);
+  if (!text) return null;
+  try {
+    return JSON.parse(text) as AudiobookManifest;
+  } catch {
+    return null;
+  }
+};
+
+const loadLocalAudiobookManifest = async (
+  fs: FileSystem,
+  book: Book,
+): Promise<AudiobookManifest | null> => {
+  try {
+    return parseManifestText(
+      await fs.readFile(getAudiobookManifestFilename(book), 'Books', 'text'),
+    );
+  } catch {
+    return null;
+  }
+};
+
+/** Manifest of the audiobook attached to a regular ebook (Books/<hash>/audiobook.json). */
+const loadAttachedAudiobookManifest = async (
+  fs: FileSystem,
+  book: Book,
+): Promise<AudiobookManifest | null> => {
+  try {
+    return parseManifestText(
+      await fs.readFile(getAttachedAudiobookManifestFilename(book.hash), 'Books', 'text'),
+    );
+  } catch {
+    return null;
+  }
+};
 
 export async function uploadFileToCloud(
   fs: FileSystem,
@@ -174,12 +246,83 @@ export async function deleteReplicaBundleFromCloud(
   }
 }
 
+// Upload a multi-file audiobook: the chapters manifest plus every chapter
+// file, each under its own cloud key `Readest/Books/<hash>/...`. The storage
+// API keys objects by the client-supplied file name, so no server change is
+// needed for multi-blob books.
+async function uploadAudiobook(
+  fs: FileSystem,
+  resolveFilePath: (path: string, base: BaseDir) => Promise<string>,
+  book: Book,
+  onProgress?: ProgressHandler,
+): Promise<void> {
+  const manifest = await loadLocalAudiobookManifest(fs, book);
+  if (!manifest) {
+    throw new Error('Audiobook manifest not found');
+  }
+  const coverExist = await fs.exists(getCoverFilename(book), 'Books');
+  const toUploadFpCount = manifest.chapters.length + 1 + (coverExist ? 1 : 0);
+  const completedFiles = { count: 0 };
+  const handleProgress = createProgressHandler(toUploadFpCount, completedFiles, onProgress);
+
+  if (coverExist) {
+    const lfp = getCoverFilename(book);
+    await uploadFileToCloud(
+      fs,
+      resolveFilePath,
+      lfp,
+      `${CLOUD_BOOKS_SUBDIR}/${lfp}`,
+      'Books',
+      handleProgress,
+      book.hash,
+    );
+    completedFiles.count++;
+  }
+
+  const manifestLfp = getAudiobookManifestFilename(book);
+  await uploadFileToCloud(
+    fs,
+    resolveFilePath,
+    manifestLfp,
+    `${CLOUD_BOOKS_SUBDIR}/${manifestLfp}`,
+    'Books',
+    handleProgress,
+    book.hash,
+  );
+  completedFiles.count++;
+
+  for (const chapter of manifest.chapters) {
+    await uploadFileToCloud(
+      fs,
+      resolveFilePath,
+      chapter.file,
+      `${CLOUD_BOOKS_SUBDIR}/${chapter.file}`,
+      'Books',
+      handleProgress,
+      book.hash,
+    );
+    completedFiles.count++;
+  }
+
+  book.deletedAt = null;
+  book.fileSyncDeletionRequestedAt = null;
+  book.updatedAt = Date.now();
+  book.uploadedAt = Date.now();
+  book.downloadedAt = Date.now();
+  book.coverDownloadedAt = Date.now();
+}
+
 export async function uploadBook(
   fs: FileSystem,
   resolveFilePath: (path: string, base: BaseDir) => Promise<string>,
   book: Book,
   onProgress?: ProgressHandler,
 ): Promise<void> {
+  if (book.format === 'AUDIOBOOK') {
+    await uploadAudiobook(fs, resolveFilePath, book, onProgress);
+    return;
+  }
+
   const completedFiles = { count: 0 };
   const coverExist = await fs.exists(getCoverFilename(book), 'Books');
 
@@ -226,6 +369,33 @@ export async function uploadBook(
   book.uploadedAt = Date.now();
   book.downloadedAt = Date.now();
   book.coverDownloadedAt = Date.now();
+
+  // An audiobook attached to this ebook uploads as extra blobs under
+  // Readest/Books/<hash>/audiobook/... — the manifest plus every chapter.
+  const attachedManifest = await loadAttachedAudiobookManifest(fs, book);
+  if (attachedManifest) {
+    const manifestLfp = getAttachedAudiobookManifestFilename(book.hash);
+    await uploadFileToCloud(
+      fs,
+      resolveFilePath,
+      manifestLfp,
+      `${CLOUD_BOOKS_SUBDIR}/${manifestLfp}`,
+      'Books',
+      () => {},
+      book.hash,
+    );
+    for (const chapter of attachedManifest.chapters) {
+      await uploadFileToCloud(
+        fs,
+        resolveFilePath,
+        chapter.file,
+        `${CLOUD_BOOKS_SUBDIR}/${chapter.file}`,
+        'Books',
+        () => {},
+        book.hash,
+      );
+    }
+  }
 }
 
 // Re-upload only the cover (books/<hash>/cover.png), overwriting the cloud
@@ -300,6 +470,164 @@ export async function downloadBookCovers(
   );
 }
 
+// Download a multi-file audiobook: the manifest first (it enumerates the
+// chapters), then the missing chapter files and the cover.
+async function downloadAudiobook(
+  appService: AppService,
+  fs: FileSystem,
+  localBooksDir: string,
+  book: Book,
+  redownload: boolean,
+  onProgress?: ProgressHandler,
+): Promise<void> {
+  if (!(await fs.exists(getDir(book), 'Books'))) {
+    await fs.createDir(getDir(book), 'Books');
+  }
+
+  const manifestLfp = getAudiobookManifestFilename(book);
+  if (redownload || !(await fs.exists(manifestLfp, 'Books'))) {
+    await downloadCloudFile(
+      appService,
+      localBooksDir,
+      manifestLfp,
+      `${CLOUD_BOOKS_SUBDIR}/${manifestLfp}`,
+      () => {},
+    );
+  }
+  const manifest = await loadLocalAudiobookManifest(fs, book);
+  if (!manifest) {
+    throw new Error('Audiobook manifest not found in cloud storage');
+  }
+
+  const needCover = redownload || !(await fs.exists(getCoverFilename(book), 'Books'));
+  const chaptersToDownload = [];
+  for (const chapter of manifest.chapters) {
+    if (redownload || !(await fs.exists(chapter.file, 'Books'))) {
+      chaptersToDownload.push(chapter);
+    }
+  }
+
+  const toDownloadFpCount = chaptersToDownload.length + (needCover ? 1 : 0);
+  const completedFiles = { count: 0 };
+  const handleProgress = createProgressHandler(toDownloadFpCount, completedFiles, onProgress);
+
+  if (needCover) {
+    try {
+      const lfp = getCoverFilename(book);
+      await downloadCloudFile(
+        appService,
+        localBooksDir,
+        lfp,
+        `${CLOUD_BOOKS_SUBDIR}/${lfp}`,
+        handleProgress,
+      );
+      book.coverDownloadedAt = Date.now();
+    } catch (error) {
+      // Covers are optional — some books never had one.
+      console.log(`Failed to download cover file for book: '${book.title}'`, error);
+    } finally {
+      completedFiles.count++;
+    }
+  }
+
+  for (const chapter of chaptersToDownload) {
+    await downloadCloudFile(
+      appService,
+      localBooksDir,
+      chapter.file,
+      `${CLOUD_BOOKS_SUBDIR}/${chapter.file}`,
+      handleProgress,
+    );
+    completedFiles.count++;
+  }
+  book.downloadedAt = Date.now();
+}
+
+/**
+ * On-demand download of the audiobook attached to a regular ebook: the
+ * manifest first (a missing manifest means the book has no audiobook in
+ * cloud storage), then the chapter files that are not yet local.
+ */
+export async function downloadAttachedAudiobook(
+  appService: AppService,
+  fs: FileSystem,
+  localBooksDir: string,
+  book: Book,
+  onProgress?: ProgressHandler,
+  downloadChapters = true,
+): Promise<AudiobookManifest | null> {
+  if (book.format === 'AUDIOBOOK') return null;
+
+  const manifestLfp = getAttachedAudiobookManifestFilename(book.hash);
+  try {
+    await downloadCloudFile(
+      appService,
+      localBooksDir,
+      manifestLfp,
+      `${CLOUD_BOOKS_SUBDIR}/${manifestLfp}`,
+      () => {},
+    );
+  } catch {
+    return null;
+  }
+  const manifest = await loadAttachedAudiobookManifest(fs, book);
+  if (!manifest) return null;
+
+  if (!downloadChapters) {
+    // Manifest-only probe: let peers list the audiobook before pulling it.
+    return manifest;
+  }
+
+  if (!(await fs.exists(getAttachedAudiobookDir(book.hash), 'Books'))) {
+    await fs.createDir(getAttachedAudiobookDir(book.hash), 'Books');
+  }
+  const chaptersToDownload = [];
+  for (const chapter of manifest.chapters) {
+    if (!(await fs.exists(chapter.file, 'Books'))) {
+      chaptersToDownload.push(chapter);
+    }
+  }
+  const completedFiles = { count: 0 };
+  const handleProgress = createProgressHandler(
+    chaptersToDownload.length,
+    completedFiles,
+    onProgress,
+  );
+  for (const chapter of chaptersToDownload) {
+    await downloadCloudFile(
+      appService,
+      localBooksDir,
+      chapter.file,
+      `${CLOUD_BOOKS_SUBDIR}/${chapter.file}`,
+      handleProgress,
+    );
+    completedFiles.count++;
+  }
+  return manifest;
+}
+
+/** Download one attached-audiobook chapter file from cloud storage. */
+export async function downloadAttachedAudiobookChapter(
+  appService: AppService,
+  fs: FileSystem,
+  localBooksDir: string,
+  book: Book,
+  chapterFile: string,
+  onProgress?: ProgressHandler,
+): Promise<void> {
+  if (book.format === 'AUDIOBOOK') return;
+  if (!(await fs.exists(getAttachedAudiobookDir(book.hash), 'Books'))) {
+    await fs.createDir(getAttachedAudiobookDir(book.hash), 'Books');
+  }
+  await downloadCloudFile(
+    appService,
+    localBooksDir,
+    chapterFile,
+    `${CLOUD_BOOKS_SUBDIR}/${chapterFile}`,
+    onProgress ?? (() => {}),
+  );
+}
+
 export async function downloadBook(
   appService: AppService,
   fs: FileSystem,
@@ -309,6 +637,11 @@ export async function downloadBook(
   redownload: boolean = false,
   onProgress?: ProgressHandler,
 ): Promise<void> {
+  if (book.format === 'AUDIOBOOK') {
+    await downloadAudiobook(appService, fs, localBooksDir, book, redownload, onProgress);
+    return;
+  }
+
   let bookDownloaded = false;
   let bookCoverDownloaded = false;
   const completedFiles = { count: 0 };
