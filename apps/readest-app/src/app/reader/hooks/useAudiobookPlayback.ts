@@ -158,6 +158,13 @@ export function useAudiobookPlayback(bookKey: string): UseAudiobookPlaybackResul
     };
     nextConfig.updatedAt = Date.now();
     await useBookDataStore.getState().saveConfig(envConfig, bookKey, nextConfig, settings);
+    // saveConfig merges only { updatedAt } into the store (perf choice in
+    // bookDataStore); the position must reach the store too or pushConfig's
+    // getConfig read serializes a config without audioPosition.
+    useBookDataStore.getState().setConfig(bookKey, {
+      audioPosition: nextConfig.audioPosition,
+      viewSettings: nextConfig.viewSettings,
+    });
     void pushConfig();
   }, [appService, envConfig, bookKey, settings, pushConfig]);
 
