@@ -40,6 +40,7 @@ export const useProgressSync = (bookKey: string) => {
   // throttled save and would otherwise re-render the entire reader subtree.
   const getConfig = useBookDataStore((s) => s.getConfig);
   const saveConfig = useBookDataStore((s) => s.saveConfig);
+  const setConfig = useBookDataStore((s) => s.setConfig);
   const getBookData = useBookDataStore((s) => s.getBookData);
   const getView = useReaderStore((s) => s.getView);
   const getViewSettings = useReaderStore((s) => s.getViewSettings);
@@ -328,6 +329,13 @@ export const useProgressSync = (bookKey: string) => {
             },
             settings,
           );
+          // saveConfig only merges { updatedAt } into the store; the adopted
+          // position must land there too, or the TTS panel's play() reads a
+          // config without audioPosition and resumes from 0.
+          setConfig(bookKey, {
+            audioPosition: remoteAudioPosition,
+            viewSettings: { ...config.viewSettings, audioPosition: remoteAudioPosition },
+          });
         }
       }
       // Two view settings cross devices; everything else in viewSettings stays

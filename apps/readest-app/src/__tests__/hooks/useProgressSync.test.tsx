@@ -26,6 +26,12 @@ const h = vi.hoisted(() => {
     progress: [5, 100] as [number, number],
     location: 'cfi-loc',
     updatedAt: 1000,
+  } as {
+    progress: [number, number];
+    location: string;
+    updatedAt: number;
+    audioPosition?: { chapterIndex: number; positionSec: number };
+    viewSettings?: { audioPosition?: { chapterIndex: number; positionSec: number } };
   };
   const libraryBook = { hash: 'h1', updatedAt: 2000, progress: [5, 100] as [number, number] };
 
@@ -35,9 +41,10 @@ const h = vi.hoisted(() => {
     config,
     libraryBook,
     user: { id: 'u1' },
-    syncConfigsMock: vi.fn(async () => {}),
+    syncConfigsMock: vi.fn(async (..._args: unknown[]) => {}),
     syncBooksMock: vi.fn(async () => {}),
-    saveConfigMock: vi.fn(async () => {}),
+    saveConfigMock: vi.fn(async (..._args: unknown[]) => {}),
+    setConfigMock: vi.fn(),
     setViewSettingsMock: vi.fn(),
     recreateViewerMock: vi.fn(),
     cfiCompareMock: vi.fn((_a: string, _b: string) => 0),
@@ -83,7 +90,7 @@ vi.mock('@/context/EnvContext', () => ({
 vi.mock('@/store/bookDataStore', () => ({
   useBookDataStore: h.makeStore({
     getConfig: () => h.config,
-    setConfig: vi.fn(),
+    setConfig: h.setConfigMock,
     saveConfig: h.saveConfigMock,
     getBookData: () => ({ book: h.book, bookDoc: h.state.bookDoc }),
   }),
@@ -163,6 +170,7 @@ beforeEach(() => {
   h.syncConfigsMock.mockClear();
   h.syncBooksMock.mockClear();
   h.saveConfigMock.mockClear();
+  h.setConfigMock.mockClear();
   h.setViewSettingsMock.mockClear();
   h.recreateViewerMock.mockClear();
   h.view.goTo.mockClear();
@@ -172,6 +180,9 @@ beforeEach(() => {
   h.getCFIFromXPointerMock.mockReset();
   h.getCFIFromXPointerMock.mockResolvedValue('');
   h.book.format = 'PDF';
+  h.config.updatedAt = 1000;
+  delete h.config.audioPosition;
+  delete h.config.viewSettings;
   h.state.syncedConfigs = [];
   h.state.progress = { location: 'cfi-loc' };
   h.state.viewSettings = { proofreadRules: [] };
@@ -468,6 +479,77 @@ describe('useProgressSync', () => {
     // The pending push is flushed immediately — Device A's last local position
     // reaches the cloud before the reader tears down.
     expect(pushCallCount()).toBeGreaterThanOrEqual(1);
+  });
+
+  // The attached-audiobook position rides viewSettings.audioPosition. The
+  // adoption below writes it to the store via setConfig — saveConfig alone
+  // only persists to disk (bookDataStore merges just { updatedAt } into the
+  // store), so the TTS panel's play() would otherwise resume from 0 even
+  // after a successful pull.
+  test('adopts a newer remote audioPosition into the store and disk', async () => {
+    const remotePos = { chapterIndex: 2, positionSec: 600 };
+    h.state.syncedConfigs = [
+      {
+        bookHash: 'h1',
+        metaHash: 'm1',
+        updatedAt: 5000,
+        viewSettings: { audioPosition: remotePos },
+      },
+    ];
+    renderHook(() => useProgressSync('h1-view1'));
+    await advance(0);
+
+    expect(h.saveConfigMock).toHaveBeenCalledTimes(1);
+    const saved = h.saveConfigMock.mock.calls[0]![2] as {
+      audioPosition?: { chapterIndex: number; positionSec: number };
+      viewSettings?: { audioPosition?: { chapterIndex: number; positionSec: number } };
+    };
+    expect(saved.audioPosition).toEqual(remotePos);
+    expect(saved.viewSettings?.audioPosition).toEqual(remotePos);
+    expect(h.setConfigMock).toHaveBeenCalledWith('h1-view1', {
+      audioPosition: remotePos,
+      viewSettings: { audioPosition: remotePos },
+    });
+  });
+
+  test('keeps the local audioPosition when it is newer than the remote one', async () => {
+    h.config.audioPosition = { chapterIndex: 1, positionSec: 30 };
+    h.config.viewSettings = { audioPosition: { chapterIndex: 1, positionSec: 30 } };
+    h.config.updatedAt = 9000;
+    h.state.syncedConfigs = [
+      {
+        bookHash: 'h1',
+        metaHash: 'm1',
+        updatedAt: 5000,
+        viewSettings: { audioPosition: { chapterIndex: 9, positionSec: 9999 } },
+      },
+    ];
+    renderHook(() => useProgressSync('h1-view1'));
+    await advance(0);
+
+    expect(h.saveConfigMock).not.toHaveBeenCalled();
+    expect(h.setConfigMock).not.toHaveBeenCalled();
+  });
+
+  test('adopts the remote audioPosition even when its timestamp is older, if the local has none', async () => {
+    const remotePos = { chapterIndex: 2, positionSec: 600 };
+    h.config.updatedAt = 9000;
+    h.state.syncedConfigs = [
+      {
+        bookHash: 'h1',
+        metaHash: 'm1',
+        updatedAt: 5000,
+        viewSettings: { audioPosition: remotePos },
+      },
+    ];
+    renderHook(() => useProgressSync('h1-view1'));
+    await advance(0);
+
+    expect(h.setConfigMock).toHaveBeenCalledWith('h1-view1', {
+      audioPosition: remotePos,
+      viewSettings: { audioPosition: remotePos },
+    });
+    expect(h.saveConfigMock).toHaveBeenCalledTimes(1);
   });
 });
 

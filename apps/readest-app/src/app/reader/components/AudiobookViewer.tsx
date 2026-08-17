@@ -10,12 +10,16 @@ import {
   MdSkipPrevious,
 } from 'react-icons/md';
 import { useEnv } from '@/context/EnvContext';
+import { useAuth } from '@/context/AuthContext';
+import { useSync } from '@/hooks/useSync';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useBookDataStore } from '@/store/bookDataStore';
 import { useSettingsStore } from '@/store/settingsStore';
 import { getMediaSession } from '@/libs/mediaSession';
 import { AUDIO_MIME_TYPES } from '@/services/tts/mediaOverlay/MediaOverlayClient';
+import { DEFAULT_BOOK_SEARCH_CONFIG } from '@/services/constants';
 import { getAudiobookChapterPath } from '@/utils/audiobook';
+import { serializeConfig } from '@/utils/serializer';
 import { createProgressThrottle } from '@/utils/transfer';
 import type { AudiobookManifest } from '@/types/audiobook';
 
@@ -24,6 +28,11 @@ interface AudiobookViewerProps {
 }
 
 const RATES = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
+
+// Cloud position pushes are debounced so a burst of position saves (5s
+// persist throttle) doesn't hammer the sync endpoint; the same cadence as
+// useAudiobookPlayback's pushConfig.
+const PUSH_DEBOUNCE_MS = 15_000;
 
 const formatTime = (sec: number): string => {
   const s = Math.max(0, Math.round(sec));
@@ -44,6 +53,8 @@ const AudiobookViewer: React.FC<AudiobookViewerProps> = ({ bookKey }) => {
   const _ = useTranslation();
   const { envConfig, appService } = useEnv();
   const { settings } = useSettingsStore();
+  const { user } = useAuth();
+  const { syncedConfigs, syncConfigs } = useSync(bookKey);
   const id = bookKey.split('-')[0]!;
   const bookData = useBookDataStore((s) => s.booksData[id]);
   const book = bookData?.book ?? null;
@@ -67,6 +78,31 @@ const AudiobookViewer: React.FC<AudiobookViewerProps> = ({ bookKey }) => {
   playingRef.current = playing;
   const manifestRef = useRef<AudiobookManifest | null>(manifest);
   manifestRef.current = manifest;
+
+  const lastPushAtRef = useRef(0);
+  const pulledOnceRef = useRef(false);
+  const adoptedOnceRef = useRef(false);
+  const userInteractedRef = useRef(false);
+
+  // Cloud push of the config (position rides viewSettings.audioPosition, the
+  // column that survives the configs sync round-trip). Reads the config from
+  // the STORE — saveThrottleRef captures the first render's persistPosition,
+  // whose closure config would otherwise go stale.
+  const pushConfig = useCallback(async () => {
+    if (!user) return;
+    const now = Date.now();
+    if (now - lastPushAtRef.current < PUSH_DEBOUNCE_MS) return;
+    lastPushAtRef.current = now;
+    const config = useBookDataStore.getState().getConfig(bookKey);
+    const book = useBookDataStore.getState().getBookData(bookKey)?.book;
+    if (!config || !book) return;
+    const newConfig = { ...config, bookHash: book.hash, metaHash: book.metaHash };
+    const compressed = JSON.parse(
+      serializeConfig(newConfig, settings.globalViewSettings, DEFAULT_BOOK_SEARCH_CONFIG),
+    );
+    delete compressed.booknotes;
+    await syncConfigs([compressed], book.hash, book.metaHash, 'push');
+  }, [user, bookKey, settings, syncConfigs]);
 
   const persistPosition = useCallback(
     async (usePosition?: number) => {
@@ -98,8 +134,16 @@ const AudiobookViewer: React.FC<AudiobookViewerProps> = ({ bookKey }) => {
       if (totalSec > 0) config.progress = [Math.round(elapsedSec), Math.round(totalSec)];
       config.updatedAt = Date.now();
       await useBookDataStore.getState().saveConfig(envConfig, bookKey, config, settings);
+      // saveConfig merges only { updatedAt } into the store (perf choice in
+      // bookDataStore); the position must reach the store too or the next
+      // pushConfig serializes a config without audioPosition.
+      useBookDataStore.getState().setConfig(bookKey, {
+        audioPosition: config.audioPosition,
+        viewSettings: config.viewSettings,
+      });
+      void pushConfig();
     },
-    [appService, bookData?.config, envConfig, bookKey, settings],
+    [appService, bookData?.config, envConfig, bookKey, settings, pushConfig],
   );
 
   const saveThrottleRef = useRef(
@@ -159,6 +203,7 @@ const AudiobookViewer: React.FC<AudiobookViewerProps> = ({ bookKey }) => {
   );
 
   const nextChapter = useCallback(async () => {
+    userInteractedRef.current = true;
     if (!manifestRef.current) return;
     const next = Math.min(chapterIndexRef.current + 1, manifestRef.current.chapters.length - 1);
     if (next === chapterIndexRef.current) {
@@ -170,6 +215,7 @@ const AudiobookViewer: React.FC<AudiobookViewerProps> = ({ bookKey }) => {
   }, [loadChapter]);
 
   const prevChapter = useCallback(async () => {
+    userInteractedRef.current = true;
     const prev = Math.max(chapterIndexRef.current - 1, 0);
     if (prev === chapterIndexRef.current) return;
     saveThrottleRef.current.flush();
@@ -177,6 +223,7 @@ const AudiobookViewer: React.FC<AudiobookViewerProps> = ({ bookKey }) => {
   }, [loadChapter]);
 
   const togglePlay = useCallback(async () => {
+    userInteractedRef.current = true;
     const audio = audioRef.current;
     if (!audio) return;
     if (!audio.src) {
@@ -196,6 +243,7 @@ const AudiobookViewer: React.FC<AudiobookViewerProps> = ({ bookKey }) => {
 
   const selectChapter = useCallback(
     async (index: number) => {
+      userInteractedRef.current = true;
       if (index === chapterIndexRef.current) return;
       saveThrottleRef.current.flush();
       await loadChapter(index, 0, playingRef.current);
@@ -204,6 +252,7 @@ const AudiobookViewer: React.FC<AudiobookViewerProps> = ({ bookKey }) => {
   );
 
   const handleSeek = (value: number) => {
+    userInteractedRef.current = true;
     const audio = audioRef.current;
     if (!audio || !durationSec) return;
     audio.currentTime = value;
@@ -231,6 +280,54 @@ const AudiobookViewer: React.FC<AudiobookViewerProps> = ({ bookKey }) => {
     void loadChapterRef.current(initialIndex, saved?.positionSec ?? 0, false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // One-shot cloud pull of the config so a position saved on another device
+  // can be adopted below. syncConfigs no-ops when the progress sync category
+  // or the cloud is unavailable, mirroring text progress sync.
+  useEffect(() => {
+    if (pulledOnceRef.current || !book) return;
+    pulledOnceRef.current = true;
+    void syncConfigs([], id, book.metaHash, 'pull');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [book?.hash, syncConfigs]);
+
+  // Adopt a remote audiobook position once: write it to store + disk (like
+  // useProgressSync does for the attached-audiobook flow) and re-load the
+  // paused chapter. User interactions win — playback is never yanked
+  // mid-listen, but the adopted position still persists for the next open.
+  useEffect(() => {
+    if (!manifest || !syncedConfigs || adoptedOnceRef.current) return;
+    const synced = syncedConfigs.find((c) => c.bookHash === id || c.metaHash === book?.metaHash);
+    const remotePos = synced?.viewSettings?.audioPosition;
+    if (!remotePos) return;
+    const freshConfig = useBookDataStore.getState().getConfig(bookKey);
+    const localPos = freshConfig?.viewSettings?.audioPosition ?? freshConfig?.audioPosition;
+    const remoteNewer = (synced.updatedAt ?? 0) > (freshConfig?.updatedAt ?? 0);
+    if (localPos && !remoteNewer) return;
+    adoptedOnceRef.current = true;
+    useBookDataStore.getState().setConfig(bookKey, {
+      audioPosition: remotePos,
+      viewSettings: { ...(freshConfig?.viewSettings ?? {}), audioPosition: remotePos },
+    });
+    if (freshConfig) {
+      void useBookDataStore.getState().saveConfig(
+        envConfig,
+        bookKey,
+        {
+          ...freshConfig,
+          audioPosition: remotePos,
+          viewSettings: { ...freshConfig.viewSettings, audioPosition: remotePos },
+          updatedAt: Date.now(),
+        },
+        settings,
+      );
+    }
+    if (!userInteractedRef.current && audioRef.current) {
+      const index = Math.min(remotePos.chapterIndex ?? 0, manifest.chapters.length - 1);
+      void loadChapterRef.current(index, remotePos.positionSec ?? 0, false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [syncedConfigs, manifest]);
 
   const handlersRef = useRef({ togglePlay, nextChapter, prevChapter });
   handlersRef.current = { togglePlay, nextChapter, prevChapter };
