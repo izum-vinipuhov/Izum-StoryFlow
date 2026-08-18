@@ -93,7 +93,7 @@ const getAuthors = (info: { authors?: Array<{ name: string } | string> | string 
 const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose }) => {
   const _ = useTranslation();
   const { appService } = useEnv();
-  const { startDownload } = useYandexDownloads();
+  const { startDownload, canDownloadToServer } = useYandexDownloads();
   const { settings } = useSettingsStore();
   const jobs = useYandexDownloadsStore((state) => state.jobs);
   const [url, setUrl] = useState('');
@@ -103,8 +103,12 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
   const [partStates, setPartStates] = useState<
     Partial<Record<YandexPartKey, YandexPartAvailability>>
   >({});
-  const [downloadTarget, setDownloadTarget] = useState<YandexDownloadTarget>('server');
+  const [targetChoice, setTargetChoice] = useState<YandexDownloadTarget>('server');
   const urlInputRef = useRef<HTMLInputElement>(null);
+
+  // Fall back to local when the server is unreachable — the upload would be
+  // skipped anyway, so the control reflects that.
+  const downloadTarget: YandexDownloadTarget = canDownloadToServer ? targetChoice : 'local';
 
   const reset = useCallback(() => {
     setUrl('');
@@ -112,7 +116,7 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
     setError(null);
     setInfo(null);
     setPartStates({});
-    setDownloadTarget('server');
+    setTargetChoice('server');
   }, []);
 
   // Reset transient state every time the dialog reopens.
@@ -565,10 +569,14 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
                   <SegmentedControl<YandexDownloadTarget>
                     options={[
                       { value: 'local', label: _('Locally') },
-                      { value: 'server', label: _('To server') },
+                      {
+                        value: 'server',
+                        label: _('To server'),
+                        disabled: !canDownloadToServer,
+                      },
                     ]}
                     value={downloadTarget}
-                    onChange={setDownloadTarget}
+                    onChange={setTargetChoice}
                     disabled={hasActivePart}
                     fullWidth
                     ariaLabel={_('Where to download the book')}
