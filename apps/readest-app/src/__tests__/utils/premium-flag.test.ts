@@ -57,6 +57,19 @@ describe('isPremiumEnabled', () => {
     vi.stubEnv('PREMIUM_ENABLED', 'false');
     expect(isPremiumEnabled()).toBe(false);
   });
+
+  test('on by default in Tauri builds that have no server runtime config', () => {
+    delete window.__READEST_RUNTIME_CONFIG;
+    vi.stubEnv('NEXT_PUBLIC_APP_PLATFORM', 'tauri');
+    expect(isPremiumEnabled()).toBe(true);
+  });
+
+  test('an explicit NEXT_PUBLIC_PREMIUM_ENABLED=false turns it off in Tauri builds', () => {
+    delete window.__READEST_RUNTIME_CONFIG;
+    vi.stubEnv('NEXT_PUBLIC_APP_PLATFORM', 'tauri');
+    vi.stubEnv('NEXT_PUBLIC_PREMIUM_ENABLED', 'false');
+    expect(isPremiumEnabled()).toBe(false);
+  });
 });
 
 describe('plan override when the premium flag is on', () => {

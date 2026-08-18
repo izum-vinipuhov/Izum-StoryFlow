@@ -2,7 +2,7 @@ import { jwtDecode } from 'jwt-decode';
 import { supabase } from '@/utils/supabase';
 import { UserPlan } from '@/types/quota';
 import { DEFAULT_DAILY_TRANSLATION_QUOTA, DEFAULT_STORAGE_QUOTA } from '@/services/constants';
-import { isWebAppPlatform } from '@/services/environment';
+import { isTauriAppPlatform, isWebAppPlatform } from '@/services/environment';
 import { getDailyUsage } from '@/services/translators/utils';
 import { getRuntimeConfig } from '@/services/runtimeConfig';
 
@@ -19,13 +19,21 @@ interface Token {
  * premium feature (cloud sync, offline TTS cache, email-in) and the top-plan
  * quotas. The flag reaches the browser via the runtime config route
  * (`/runtime-config.js`) and the server API routes via the env var directly.
- * Off by default.
+ *
+ * Tauri builds are statically exported, so `/runtime-config.js` is never
+ * served and the server-side switch can't reach the webview — on devices the
+ * premium is ON by default. It can still be turned off explicitly with
+ * `PREMIUM_ENABLED=false` / `NEXT_PUBLIC_PREMIUM_ENABLED=false` at build time.
  */
 export const PREMIUM_PLAN: UserPlan = 'pro';
 
 export const isPremiumEnabled = (): boolean => {
   const runtimeConfig = getRuntimeConfig();
-  return runtimeConfig?.premiumEnabled ?? process.env['PREMIUM_ENABLED'] === 'true';
+  if (runtimeConfig?.premiumEnabled !== undefined) return runtimeConfig.premiumEnabled;
+  const envFlag = process.env['PREMIUM_ENABLED'] ?? process.env['NEXT_PUBLIC_PREMIUM_ENABLED'];
+  if (envFlag === 'true') return true;
+  if (envFlag === 'false') return false;
+  return isTauriAppPlatform();
 };
 
 const resolvePlan = (data: Token): UserPlan =>
