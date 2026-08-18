@@ -77,7 +77,7 @@ const LocalSendForm: React.FC<LocalSendFormProps> = ({ onBack }) => {
       <BoxedList>
         <SettingsSwitchRow
           label={_('Enable LocalSend')}
-          description={_('Receive books while Readest is open')}
+          description={_('Receive books while Izum StoryFlow is open')}
           checked={enabled}
           onChange={toggleEnabled}
           data-setting-id='settings.integrations.localsend.enabled'

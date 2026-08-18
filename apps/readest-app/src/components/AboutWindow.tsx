@@ -101,7 +101,7 @@ export const AboutWindow = () => {
     <Dialog
       id='about_window'
       isOpen={isOpen}
-      title={_('About Readest')}
+      title={_('About Izum StoryFlow')}
       onClose={handleClose}
       boxClassName='sm:!w-[480px] sm:!max-w-screen-sm sm:h-auto'
     >
@@ -112,7 +112,7 @@ export const AboutWindow = () => {
               <Image src='/icon.png' alt='App Logo' className='h-20 w-20' width={64} height={64} />
             </div>
             <div className='flex select-text flex-col items-center'>
-              <h2 className='mb-2 text-2xl font-bold'>Readest</h2>
+              <h2 className='mb-2 text-2xl font-bold'>Izum StoryFlow</h2>
               <button
                 type='button'
                 title={_('Copy')}
@@ -147,12 +147,23 @@ export const AboutWindow = () => {
 
           <hr aria-hidden='true' className='border-base-300 my-12 w-full sm:my-4' />
 
+          <div className='flex flex-1 flex-col items-center justify-start gap-2 px-4 text-center'>
+            <p className='text-neutral-content text-sm'>
+              {_(
+                'Izum StoryFlow is a free and open-source ebook reader and library manager created by Izum Vinipuhov as a Readest clone. Read books in any format, listen to audiobooks, sync your library across devices, or deploy your own self-hosted cloud storage — your books, your way.',
+              )}
+            </p>
+          </div>
+
           <div
             className='flex flex-1 flex-col items-center justify-start gap-2 px-4 text-center'
             dir='ltr'
           >
             <p className='text-neutral-content text-sm'>
               © {new Date().getFullYear()} Bilingify LLC. All rights reserved.
+            </p>
+            <p className='text-neutral-content text-sm'>
+              © {new Date().getFullYear()} Izum Vinipuhov. All rights reserved.
             </p>
 
             <p className='text-neutral-content text-xs'>
@@ -177,6 +188,29 @@ export const AboutWindow = () => {
             <LegalLinks />
           </div>
           <SupportLinks />
+          <div className='eink-bordered border-base-300/60 mx-8 mb-4 flex w-auto items-center gap-3 rounded-xl border p-3 text-start'>
+            <Image
+              src='/images/izum-music.webp'
+              alt='Izum Music'
+              width={56}
+              height={56}
+              className='rounded-lg'
+            />
+            <div className='flex min-w-0 flex-col gap-1'>
+              <Link
+                href='https://github.com/izum-vinipuhov/Izum-Music'
+                title={_('Izum Music on GitHub')}
+                className='text-base-content text-sm font-semibold hover:underline'
+              >
+                Izum Music
+              </Link>
+              <p className='text-neutral-content text-xs'>
+                {_(
+                  'Cross-platform, offline mode, local playback, auto metadata, Izum Mix playlists & plugin SDK. Beta, stable & ready to try!',
+                )}
+              </p>
+            </div>
+          </div>
         </div>
       )}
     </Dialog>

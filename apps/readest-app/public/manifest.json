@@ -1,10 +1,10 @@
 {
-  "name": "Readest",
-  "short_name": "Readest",
+  "name": "Izum StoryFlow",
+  "short_name": "Izum StoryFlow",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
-  "description": "Readest is an open-source eBook reader supporting EPUB, PDF, and sync across devices.",
+  "description": "Izum StoryFlow is a free, open-source ebook reader and library manager by Izum Vinipuhov — read books, listen to audiobooks, and sync your library across devices.",
   "icons": [
     {
       "src": "/icon.png",

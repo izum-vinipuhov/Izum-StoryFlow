@@ -663,12 +663,12 @@ const actionItems = [
   },
   {
     id: 'action.about',
-    labelKey: _('About Readest'),
+    labelKey: _('About Izum StoryFlow'),
     keywords: ['about', 'readest', 'version', 'info'],
   },
   {
     id: 'action.telemetry',
-    labelKey: _('Help improve Readest'),
+    labelKey: _('Help improve Izum StoryFlow'),
     keywords: ['telemetry', 'analytics', 'improve', 'statistics'],
   },
 ];

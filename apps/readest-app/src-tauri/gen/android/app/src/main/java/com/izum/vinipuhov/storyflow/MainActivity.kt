@@ -1,4 +1,4 @@
-package com.bilingify.readest
+package com.izum.vinipuhov.storyflow
 
 import android.os.Build
 import android.os.Bundle
