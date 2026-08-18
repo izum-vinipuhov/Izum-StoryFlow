@@ -177,6 +177,54 @@ describe('yandexDownloadsManager', () => {
     expect(mockImportAudiobook).not.toHaveBeenCalled();
   });
 
+  it('resumeJob retries a failed job', async () => {
+    const appService = createAppService();
+    mockStream.mockRejectedValueOnce(new Error('network down'));
+    mockStream.mockImplementationOnce(async (_url, _token, _signal, onChunk) => {
+      await Promise.resolve();
+      onChunk(encoder.encode('ab'));
+      return { totalBytes: 2, chunks: [] };
+    });
+    mockStream.mockImplementationOnce(async (_url, _token, _signal, onChunk) => {
+      await Promise.resolve();
+      onChunk(encoder.encode('cd'));
+      return { totalBytes: 2, chunks: [] };
+    });
+
+    await startJob(audiobookSpec(), appService);
+    expect(useYandexDownloadsStore.getState().jobs[0]?.status).toBe('failed');
+
+    await yandexDownloadsManager.resumeJob('TsY5HyiY');
+    await vi.waitFor(() => {
+      const job = useYandexDownloadsStore.getState().jobs[0]!;
+      expect(job.status).toBe('completed');
+      expect(job.files.every((f) => f.status === 'completed')).toBe(true);
+    });
+  });
+
+  it('book and audiobook jobs of the same uuid coexist with distinct ids', async () => {
+    const appService = createAppService();
+    mockStream.mockImplementation(
+      (_url, _token, signal, _onChunk) =>
+        new Promise((_resolve, reject) => {
+          signal.addEventListener('abort', () => reject(new Error('aborted')));
+        }),
+    );
+
+    startJob(ebookSpec(), appService); // id 'Abc123'
+    startJob(audiobookSpec({ id: 'Abc123::audiobook' }), appService);
+    await vi.waitFor(() => {
+      expect(useYandexDownloadsStore.getState().jobs).toHaveLength(2);
+    });
+
+    yandexDownloadsManager.pauseJob('Abc123');
+    await vi.waitFor(() => {
+      const jobs = useYandexDownloadsStore.getState().jobs;
+      expect(jobs[0]?.status).toBe('paused');
+      expect(jobs[1]?.status).toBe('downloading');
+    });
+  });
+
   it('pause aborts the current file and resume restarts it from scratch', async () => {
     const appService = createAppService();
     mockStream.mockImplementationOnce(

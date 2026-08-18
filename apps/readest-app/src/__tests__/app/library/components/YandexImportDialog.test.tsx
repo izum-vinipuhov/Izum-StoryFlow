@@ -32,6 +32,14 @@ const clientMocks = vi.hoisted(() => ({
   probeFileSize: vi.fn(),
 }));
 
+const appServiceMocks = vi.hoisted(() => ({
+  readFile: vi.fn<() => Promise<string | ArrayBuffer>>(async () => {
+    throw new Error('ENOENT');
+  }),
+  exists: vi.fn<() => Promise<boolean>>(async () => false),
+  isBookAvailable: vi.fn<() => Promise<boolean>>(async () => false),
+}));
+
 vi.mock('@/services/yandex/client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/services/yandex/client')>();
   return {
@@ -44,6 +52,11 @@ vi.mock('@/services/yandex/client', async (importOriginal) => {
 });
 
 import YandexImportDialog from '@/app/library/components/YandexImportDialog';
+import { useLibraryStore } from '@/store/libraryStore';
+import { useYandexDownloadsStore } from '@/store/yandexDownloadsStore';
+import { yandexDownloadsManager } from '@/services/yandex/yandexDownloadsManager';
+import { getAudiobookManifestHash } from '@/utils/audiobook';
+import type { Book } from '@/types/book';
 
 const withToken = () =>
   useSettingsStoreMock.mockReturnValue({ settings: { yandexBooks: { accessToken: 'y0_tok' } } });
@@ -56,19 +69,52 @@ const search = async (url: string) => {
   fireEvent.click(screen.getByRole('button', { name: 'Search' }));
 };
 
+const bookRow = (hash: string, format = 'EPUB'): Book =>
+  ({ hash, format, title: 'Test', author: '', createdAt: 0, updatedAt: 0 }) as Book;
+
+const bookInfo = {
+  title: 'Книга',
+  cover: { large: 'https://covers/book.jpeg' },
+  authors: [{ name: 'Автор' }],
+};
+const audiobookInfo = {
+  title: 'Ведьмак',
+  duration: 100,
+  cover: { large: 'https://covers/audiobook.jpeg' },
+  authors: [{ name: 'Анджей Сапковский' }],
+};
+const tracks = [
+  {
+    number: 1,
+    duration: { seconds: 2120 },
+    offline: { max_bit_rate: { url: 'https://cdn/1.m3u8' } },
+  },
+];
+
 beforeEach(() => {
-  useEnvMock.mockReturnValue({ envConfig: {}, appService: {} });
+  useEnvMock.mockReturnValue({ envConfig: {}, appService: appServiceMocks });
   withToken();
   clientMocks.fetchBookInfo.mockReset();
   clientMocks.fetchAudiobookInfo.mockReset();
   clientMocks.fetchTracks.mockReset();
   clientMocks.probeFileSize.mockReset();
   clientMocks.probeFileSize.mockResolvedValue(null);
+  appServiceMocks.readFile.mockReset();
+  appServiceMocks.readFile.mockImplementation(async () => {
+    throw new Error('ENOENT');
+  });
+  appServiceMocks.exists.mockReset();
+  appServiceMocks.exists.mockResolvedValue(false);
+  appServiceMocks.isBookAvailable.mockReset();
+  appServiceMocks.isBookAvailable.mockResolvedValue(false);
+  useYandexDownloadsStore.getState().clearAll();
+  useLibraryStore.getState().setLibrary([]);
 });
 
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  vi.restoreAllMocks();
 });
 
 describe('YandexImportDialog', () => {
@@ -208,6 +254,7 @@ describe('YandexImportDialog', () => {
     expect(startDownloadMock).toHaveBeenCalledTimes(2);
     const audiobookSpec = startDownloadMock.mock.calls[1]![0];
     expect(audiobookSpec.resourceType).toBe('audiobook');
+    expect(audiobookSpec.id).toBe('Abc123::attached-audiobook');
     expect(audiobookSpec.audiobook.attachToBookHash).toBe('epubhash');
     expect(audiobookSpec.files[0]!.path).toContain('epubhash/audiobook/chapter_001.m4a');
   });
@@ -241,6 +288,7 @@ describe('YandexImportDialog', () => {
     await waitFor(() => expect(startDownloadMock).toHaveBeenCalledTimes(1));
     const spec = startDownloadMock.mock.calls[0]![0];
     expect(spec.resourceType).toBe('audiobook');
+    expect(spec.id).toBe('TsY5HyiY::audiobook');
     expect(spec.files).toHaveLength(2);
     expect(spec.files[0]!.url).toBe('https://cdn/1.m4a');
     expect(spec.files[0]!.base).toBe('Books');
@@ -250,7 +298,8 @@ describe('YandexImportDialog', () => {
     expect(spec.audiobook.chapters[0]!.durationSec).toBe(2120);
     // The translation mock is the identity — i18next interpolates the key.
     expect(spec.audiobook.chapters[0]!.title).toBe('Chapter {{number}}');
-    expect(onClose).toHaveBeenCalled();
+    // The dialog stays open and shows the download progress instead.
+    expect(onClose).not.toHaveBeenCalled();
   });
 
   it('offers the download-target toggle and defaults to the server', async () => {
@@ -288,5 +337,127 @@ describe('YandexImportDialog', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Book' }));
     await waitFor(() => expect(startDownloadMock).toHaveBeenCalledTimes(1));
     expect(startDownloadMock.mock.calls[0]![1]).toMatchObject({ target: 'local' });
+  });
+
+  it('triggers the search on Enter in the url field', async () => {
+    clientMocks.fetchBookInfo.mockResolvedValue(bookInfo);
+    clientMocks.fetchAudiobookInfo.mockRejectedValue(new Error('Audiobook not found'));
+
+    render(<YandexImportDialog isOpen onClose={vi.fn()} />);
+    const input = (await screen.findByRole('textbox')) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: 'https://books.yandex.ru/books/Abc123' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(await screen.findByText('Книга')).toBeTruthy();
+  });
+
+  it('resets the dialog and refocuses the url input via the clear button', async () => {
+    clientMocks.fetchBookInfo.mockResolvedValue(bookInfo);
+    clientMocks.fetchAudiobookInfo.mockRejectedValue(new Error('Audiobook not found'));
+
+    render(<YandexImportDialog isOpen onClose={vi.fn()} />);
+    await search('https://books.yandex.ru/books/Abc123');
+    expect(await screen.findByText('Книга')).toBeTruthy();
+    // The Dialog focuses itself 100ms after opening — let that settle first.
+    await new Promise((resolve) => setTimeout(resolve, 150));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear search' }));
+    await waitFor(() => {
+      expect(screen.queryByText('Книга')).toBeNull();
+    });
+    const input = screen.getByRole('textbox') as HTMLInputElement;
+    expect(input.value).toBe('');
+    expect(document.activeElement).toBe(input);
+  });
+
+  it('disables the Book button and hides Download Fully when only the ebook is downloaded', async () => {
+    appServiceMocks.readFile.mockResolvedValue(
+      JSON.stringify({ schemaVersion: 1, books: { Abc123: { bookHash: 'h1' } }, audiobooks: {} }),
+    );
+    appServiceMocks.isBookAvailable.mockResolvedValue(true);
+    useLibraryStore.getState().setLibrary([bookRow('h1')]);
+    clientMocks.fetchBookInfo.mockResolvedValue(bookInfo);
+    clientMocks.fetchAudiobookInfo.mockResolvedValue(audiobookInfo);
+    clientMocks.fetchTracks.mockResolvedValue(tracks);
+
+    render(<YandexImportDialog isOpen onClose={vi.fn()} />);
+    await search('https://books.yandex.ru/books/Abc123');
+
+    const downloadedButton = await screen.findByRole('button', { name: 'Downloaded' });
+    expect(downloadedButton.getAttribute('disabled')).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Audiobook' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Download Fully' })).toBeNull();
+  });
+
+  it('disables the Audiobook button when only the standalone audiobook is downloaded', async () => {
+    const chapters = [{ title: 'Chapter {{number}}', durationSec: 2120 }];
+    const hash = getAudiobookManifestHash(chapters);
+    appServiceMocks.isBookAvailable.mockResolvedValue(true);
+    useLibraryStore.getState().setLibrary([bookRow(hash, 'AUDIOBOOK')]);
+    clientMocks.fetchBookInfo.mockResolvedValue(bookInfo);
+    clientMocks.fetchAudiobookInfo.mockResolvedValue(audiobookInfo);
+    clientMocks.fetchTracks.mockResolvedValue(tracks);
+
+    render(<YandexImportDialog isOpen onClose={vi.fn()} />);
+    await search('https://books.yandex.ru/books/Abc123');
+
+    const downloadedButton = await screen.findByRole('button', { name: 'Downloaded' });
+    expect(downloadedButton.getAttribute('disabled')).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Book' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Download Fully' })).toBeNull();
+  });
+
+  it('hides all download buttons when both parts are downloaded', async () => {
+    const chapters = [{ title: 'Chapter {{number}}', durationSec: 2120 }];
+    const hash = getAudiobookManifestHash(chapters);
+    appServiceMocks.readFile.mockResolvedValue(
+      JSON.stringify({ schemaVersion: 1, books: { Abc123: { bookHash: 'h1' } }, audiobooks: {} }),
+    );
+    appServiceMocks.isBookAvailable.mockResolvedValue(true);
+    useLibraryStore.getState().setLibrary([bookRow('h1'), bookRow(hash, 'AUDIOBOOK')]);
+    clientMocks.fetchBookInfo.mockResolvedValue(bookInfo);
+    clientMocks.fetchAudiobookInfo.mockResolvedValue(audiobookInfo);
+    clientMocks.fetchTracks.mockResolvedValue(tracks);
+
+    render(<YandexImportDialog isOpen onClose={vi.fn()} />);
+    await search('https://books.yandex.ru/books/Abc123');
+
+    expect(await screen.findByText('Книга')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Book' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Audiobook' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Downloaded' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Download Fully' })).toBeNull();
+  });
+
+  it('shows live progress with pause and cancel for a running job on search', async () => {
+    useYandexDownloadsStore.getState().addJob({
+      id: 'Abc123',
+      resourceType: 'book',
+      title: 'Книга',
+      author: '',
+      coverUrl: '',
+      status: 'downloading',
+      totalBytes: 100,
+      downloadedBytes: 50,
+      createdAt: 0,
+      files: [],
+    });
+    const pauseSpy = vi.spyOn(yandexDownloadsManager, 'pauseJob');
+    const cancelSpy = vi.spyOn(yandexDownloadsManager, 'cancelJob');
+    clientMocks.fetchBookInfo.mockResolvedValue(bookInfo);
+    clientMocks.fetchAudiobookInfo.mockResolvedValue(audiobookInfo);
+    clientMocks.fetchTracks.mockResolvedValue(tracks);
+
+    render(<YandexImportDialog isOpen onClose={vi.fn()} />);
+    await search('https://books.yandex.ru/books/Abc123');
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Pause' }));
+    expect(pauseSpy).toHaveBeenCalledWith('Abc123');
+    // The start button is replaced by the progress block.
+    expect(screen.queryByRole('button', { name: 'Book' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Download Fully' })).toBeNull();
+    // The progress block's cancel comes before the dialog's own Cancel button.
+    fireEvent.click(screen.getAllByRole('button', { name: 'Cancel' })[0]!);
+    expect(cancelSpy).toHaveBeenCalledWith('Abc123');
   });
 });
