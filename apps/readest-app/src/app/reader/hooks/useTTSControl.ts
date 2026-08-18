@@ -248,6 +248,10 @@ export const useTTSControl = ({ bookKey, onRequestHidePanel }: UseTTSControlProp
     const session = ttsSessionManager.getSessionByHash(bookHash);
     if (!session || session.controller.terminated) return;
     if (ttsControllerRef.current === session.controller) return;
+    // The attached-audiobook player claims the same session slot but is not a
+    // TTSController: adopting it would flip ttsEnabled (routing the Speak
+    // button to tts-stop) and handleStop's shutdown() would brick the player.
+    if (!(session.controller instanceof TTSController)) return;
     const primaryKey = useReaderStore
       .getState()
       .bookKeys.find((k) => getBookHashFromKey(k) === bookHash);

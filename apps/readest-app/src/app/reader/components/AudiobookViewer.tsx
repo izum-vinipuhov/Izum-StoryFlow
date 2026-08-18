@@ -18,7 +18,7 @@ import { useSettingsStore } from '@/store/settingsStore';
 import { getMediaSession } from '@/libs/mediaSession';
 import { AUDIO_MIME_TYPES } from '@/services/tts/mediaOverlay/MediaOverlayClient';
 import { DEFAULT_BOOK_SEARCH_CONFIG } from '@/services/constants';
-import { getAudiobookChapterPath } from '@/utils/audiobook';
+import { getAudiobookChapterPath, isRemoteAudioPositionNewer } from '@/utils/audiobook';
 import { serializeConfig } from '@/utils/serializer';
 import { createProgressThrottle } from '@/utils/transfer';
 import type { AudiobookManifest } from '@/types/audiobook';
@@ -125,7 +125,13 @@ const AudiobookViewer: React.FC<AudiobookViewerProps> = ({ bookKey }) => {
           0,
         );
       const config = { ...bookData.config };
-      config.audioPosition = { chapterIndex: chapterIndexRef.current, positionSec: position };
+      // The save stamp rides INSIDE the position: it is the LWW clock the
+      // cross-device merge compares, immune to unrelated config writes.
+      config.audioPosition = {
+        chapterIndex: chapterIndexRef.current,
+        positionSec: position,
+        updatedAt: Date.now(),
+      };
       // Mirror into viewSettings so the position survives the configs sync.
       config.viewSettings = {
         ...(config.viewSettings ?? {}),
@@ -302,7 +308,14 @@ const AudiobookViewer: React.FC<AudiobookViewerProps> = ({ bookKey }) => {
     if (!remotePos) return;
     const freshConfig = useBookDataStore.getState().getConfig(bookKey);
     const localPos = freshConfig?.viewSettings?.audioPosition ?? freshConfig?.audioPosition;
-    const remoteNewer = (synced.updatedAt ?? 0) > (freshConfig?.updatedAt ?? 0);
+    // LWW on listen time: the position's own save stamp wins, so a
+    // text-page-turn save on a stale device can't regress the position.
+    const remoteNewer = isRemoteAudioPositionNewer(
+      remotePos,
+      localPos,
+      synced.updatedAt ?? 0,
+      freshConfig?.updatedAt ?? 0,
+    );
     if (localPos && !remoteNewer) return;
     adoptedOnceRef.current = true;
     useBookDataStore.getState().setConfig(bookKey, {

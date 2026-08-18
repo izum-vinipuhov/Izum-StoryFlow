@@ -1,5 +1,40 @@
 import { md5 } from 'js-md5';
 import type { Book } from '@/types/book';
+import type { AudiobookPosition } from '@/types/audiobook';
+
+/** Drift between two saves of "the same moment" that is not worth syncing. */
+export const AUDIO_POSITION_SYNC_TOLERANCE_SEC = 5;
+
+/** Two positions are effectively the same playback moment (same chapter, tiny drift). */
+export const isAudioPositionWithinTolerance = (
+  a: AudiobookPosition | null | undefined,
+  b: AudiobookPosition | null | undefined,
+): boolean => {
+  if (!a || !b) return false;
+  return (
+    a.chapterIndex === b.chapterIndex &&
+    Math.abs(a.positionSec - b.positionSec) <= AUDIO_POSITION_SYNC_TOLERANCE_SEC
+  );
+};
+
+/**
+ * Last-writer-wins on listen time: positions carry their own save stamp
+ * (`updatedAt`, written at persist time), so the comparison is immune to
+ * unrelated config writes (text page turns, view settings) bumping
+ * config.updatedAt. Rows from before stamping fall back to the whole-config
+ * timestamps; a stamped side always beats an unstamped one.
+ */
+export const isRemoteAudioPositionNewer = (
+  remote: AudiobookPosition | undefined,
+  local: AudiobookPosition | null | undefined,
+  remoteConfigUpdatedAt: number,
+  localConfigUpdatedAt: number,
+): boolean => {
+  const remoteStamp = remote?.updatedAt ?? 0;
+  const localStamp = local?.updatedAt ?? 0;
+  if (remoteStamp || localStamp) return remoteStamp > localStamp;
+  return remoteConfigUpdatedAt > localConfigUpdatedAt;
+};
 
 /** Manifest listing the chapter files inside `Books/<hash>/`. */
 export const getAudiobookManifestFilename = (book: Book): string => `${book.hash}/chapters.json`;

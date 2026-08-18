@@ -17,6 +17,7 @@ import { eventDispatcher } from '@/utils/event';
 import { DEFAULT_BOOK_SEARCH_CONFIG, SYNC_PROGRESS_INTERVAL_SEC } from '@/services/constants';
 import { getCFIFromXPointer, getXPointerFromCFI } from '@/utils/xcfi';
 import { isMalformedLocationCfi } from '@/utils/cfi';
+import { isRemoteAudioPositionNewer } from '@/utils/audiobook';
 
 // Backoff schedule for the first-pull retry on book open. After these
 // attempts the gate releases unconditionally so the user's progress can
@@ -316,7 +317,14 @@ export const useProgressSync = (bookKey: string) => {
       const remoteAudioPosition = syncedConfig.viewSettings?.audioPosition;
       if (remoteAudioPosition) {
         const localAudioPosition = config.viewSettings?.audioPosition ?? config.audioPosition;
-        const remoteNewer = (syncedConfig.updatedAt ?? 0) > (config.updatedAt ?? 0);
+        // LWW on listen time: the position's own save stamp wins, so a
+        // text-page-turn save on a stale device can't regress the position.
+        const remoteNewer = isRemoteAudioPositionNewer(
+          remoteAudioPosition,
+          localAudioPosition,
+          syncedConfig.updatedAt ?? 0,
+          config.updatedAt ?? 0,
+        );
         if (!localAudioPosition || remoteNewer) {
           await saveConfig(
             envConfig,

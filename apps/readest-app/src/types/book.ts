@@ -5,6 +5,7 @@ import { TTSMediaMetadataMode } from '@/services/tts/types';
 import { TTSPlayerStyle } from '@/services/tts/types';
 import type { AnnotationLinkType } from '@/utils/deeplink';
 import { AnnotationToolType } from './annotator';
+import type { AudiobookPosition } from './audiobook';
 
 export type BookFormat =
   | 'EPUB'
@@ -456,7 +457,7 @@ export interface ViewSettingsConfig {
    * top-level BookConfig field) because the view_settings column is the part
    * of the config that survives the configs sync round-trip.
    */
-  audioPosition?: { chapterIndex: number; positionSec: number };
+  audioPosition?: AudiobookPosition;
 }
 
 export interface ViewSettings
@@ -570,7 +571,7 @@ export interface BookConfig {
   booknotes?: BookNote[];
   rsvpPosition?: { cfi: string; wordText: string };
   /** AUDIOBOOK-only playback position (chapter index + seconds within it). */
-  audioPosition?: { chapterIndex: number; positionSec: number };
+  audioPosition?: AudiobookPosition;
   searchConfig?: Partial<BookSearchConfig>;
   viewSettings?: Partial<ViewSettings>;
 
