@@ -22,8 +22,9 @@ const appService = {
 vi.mock('@/context/EnvContext', () => ({
   useEnv: () => ({ appService }),
 }));
+const authMock = vi.hoisted(() => ({ user: { id: 'u1' } as { id: string } | null }));
 vi.mock('@/context/AuthContext', () => ({
-  useAuth: () => ({ user: { id: 'u1' } }),
+  useAuth: () => ({ user: authMock.user }),
 }));
 
 vi.mock('@/services/transferManager', () => ({
@@ -59,6 +60,7 @@ let jobDeps: JobDeps | undefined;
 
 beforeEach(() => {
   jobDeps = undefined;
+  authMock.user = { id: 'u1' };
   mocks.startJob.mockReset();
   mocks.startJob.mockImplementation((_spec: YandexJobSpec, deps: JobDeps) => {
     jobDeps = deps;
@@ -180,5 +182,23 @@ describe('useYandexDownloads', () => {
       audiobooks: Record<string, { attachToBookHash: string }>;
     };
     expect(index.audiobooks['ah1']).toEqual({ attachToBookHash: 'e1' });
+  });
+
+  test('reports the server target as available when logged in with cloud storage active', () => {
+    const { result } = renderHook(() => useYandexDownloads());
+    expect(result.current.canDownloadToServer).toBe(true);
+  });
+
+  test('reports the server target as unavailable when logged out', () => {
+    authMock.user = null;
+    const { result } = renderHook(() => useYandexDownloads());
+    expect(result.current.canDownloadToServer).toBe(false);
+  });
+
+  test('reports the server target as unavailable when the device is offline', () => {
+    const spy = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+    const { result } = renderHook(() => useYandexDownloads());
+    expect(result.current.canDownloadToServer).toBe(false);
+    spy.mockRestore();
   });
 });

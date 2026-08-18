@@ -21,8 +21,12 @@ vi.mock('@/app/library/components/YandexTokenDialog', () => ({
 }));
 
 const startDownloadMock = vi.fn().mockResolvedValue(undefined);
+const canDownloadToServerMock = vi.fn(() => true);
 vi.mock('@/hooks/useYandexDownloads', () => ({
-  useYandexDownloads: () => ({ startDownload: startDownloadMock }),
+  useYandexDownloads: () => ({
+    startDownload: startDownloadMock,
+    canDownloadToServer: canDownloadToServerMock(),
+  }),
 }));
 
 const clientMocks = vi.hoisted(() => ({
@@ -93,6 +97,8 @@ const tracks = [
 
 beforeEach(() => {
   useEnvMock.mockReturnValue({ envConfig: {}, appService: appServiceMocks });
+  canDownloadToServerMock.mockReset();
+  canDownloadToServerMock.mockReturnValue(true);
   withToken();
   clientMocks.fetchBookInfo.mockReset();
   clientMocks.fetchAudiobookInfo.mockReset();
@@ -334,6 +340,24 @@ describe('YandexImportDialog', () => {
     await search('https://books.yandex.ru/books/Abc123');
 
     fireEvent.click(await screen.findByRole('radio', { name: 'Locally' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Book' }));
+    await waitFor(() => expect(startDownloadMock).toHaveBeenCalledTimes(1));
+    expect(startDownloadMock.mock.calls[0]![1]).toMatchObject({ target: 'local' });
+  });
+
+  it('disables the server target and falls back to local when the server is unavailable', async () => {
+    canDownloadToServerMock.mockReturnValue(false);
+    clientMocks.fetchBookInfo.mockResolvedValue(bookInfo);
+    clientMocks.fetchAudiobookInfo.mockRejectedValue(new Error('Audiobook not found'));
+
+    render(<YandexImportDialog isOpen onClose={vi.fn()} />);
+    await search('https://books.yandex.ru/books/Abc123');
+
+    const serverOption = await screen.findByRole('radio', { name: 'To server' });
+    expect(serverOption.getAttribute('disabled')).toBeDefined();
+    const localOption = screen.getByRole('radio', { name: 'Locally' });
+    expect(localOption.getAttribute('aria-checked')).toBe('true');
+
     fireEvent.click(screen.getByRole('button', { name: 'Book' }));
     await waitFor(() => expect(startDownloadMock).toHaveBeenCalledTimes(1));
     expect(startDownloadMock.mock.calls[0]![1]).toMatchObject({ target: 'local' });

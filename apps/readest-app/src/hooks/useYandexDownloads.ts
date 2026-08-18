@@ -29,6 +29,12 @@ export type YandexDownloadTarget = 'local' | 'server';
 export function useYandexDownloads() {
   const { appService } = useEnv();
   const { user } = useAuth();
+  const { settings } = useSettingsStore();
+
+  // The server target only makes sense when the server is actually
+  // reachable: a signed-in account, cloud storage enabled, device online.
+  const canDownloadToServer =
+    !!user && isReadestCloudStorageActive(settings) && navigator.onLine !== false;
 
   const startDownload = useCallback(
     async (
@@ -95,5 +101,5 @@ export function useYandexDownloads() {
     [appService, user],
   );
 
-  return { startDownload };
+  return { startDownload, canDownloadToServer };
 }
