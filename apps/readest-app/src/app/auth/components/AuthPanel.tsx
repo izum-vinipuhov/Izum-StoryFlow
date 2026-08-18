@@ -1,10 +1,14 @@
+import { useState } from 'react';
 import Image from 'next/image';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { FcGoogle } from 'react-icons/fc';
 import { FaApple, FaGithub, FaDiscord } from 'react-icons/fa';
+import { PiGearSix } from 'react-icons/pi';
 import { useTranslation } from '@/hooks/useTranslation';
+import { isTauriAppPlatform } from '@/services/environment';
 import { ProviderLogin, type OAuthProvider } from './ProviderLogin';
 import EmailPasswordAuth from './EmailPasswordAuth';
+import ServerConfigDialog from './ServerConfigDialog';
 
 interface AuthPanelProps {
   supabaseClient: SupabaseClient;
@@ -20,6 +24,7 @@ export default function AuthPanel({
   onProviderSignIn,
 }: AuthPanelProps) {
   const _ = useTranslation();
+  const [serverConfigOpen, setServerConfigOpen] = useState(false);
 
   return (
     <div className='flex w-full max-w-sm flex-col items-center gap-6'>
@@ -68,6 +73,22 @@ export default function AuthPanel({
         redirectTo={redirectTo}
         magicLink={magicLink}
       />
+      {isTauriAppPlatform() && (
+        <>
+          <button
+            type='button'
+            className='btn btn-ghost btn-sm eink-bordered w-full'
+            onClick={() => setServerConfigOpen(true)}
+          >
+            <PiGearSix className='h-4 w-4' />
+            {_('Configure server')}
+          </button>
+          <ServerConfigDialog
+            isOpen={serverConfigOpen}
+            onClose={() => setServerConfigOpen(false)}
+          />
+        </>
+      )}
     </div>
   );
 }
