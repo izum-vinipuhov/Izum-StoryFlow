@@ -12,10 +12,18 @@ import {
 } from '@/services/yandex/yandexDownloadsManager';
 
 /**
+ * Where a Yandex download should end up: `server` mirrors the manual OPDS
+ * path (files are uploaded to Readest Cloud after import), `local` keeps the
+ * files only on this device — nothing is written to the server.
+ */
+export type YandexDownloadTarget = 'local' | 'server';
+
+/**
  * Bridges the Yandex downloads manager to the library stores: starts a job
  * with the current settings snapshot and merges imported books the same way
  * the OPDS auto-download path does (dedupe by hash, save immediately, then
- * queue the cloud upload when Readest Cloud storage is active).
+ * queue the cloud upload when Readest Cloud storage is active and the target
+ * is the server).
  */
 export function useYandexDownloads() {
   const { appService } = useEnv();
@@ -24,9 +32,13 @@ export function useYandexDownloads() {
   const startDownload = useCallback(
     async (
       spec: YandexJobSpec,
-      opts?: { onBookImported?: (book: Book) => Promise<void> | void },
+      opts?: {
+        onBookImported?: (book: Book) => Promise<void> | void;
+        target?: YandexDownloadTarget;
+      },
     ) => {
       if (!appService) return;
+      const target = opts?.target ?? 'server';
       const { settings } = useSettingsStore.getState();
       const librarySnapshot = [...useLibraryStore.getState().library];
 
@@ -43,7 +55,7 @@ export function useYandexDownloads() {
         // Cloud storage is active. Delay so the transfer manager has had a
         // chance to finish initializing if this fires right after load.
         const { settings: currentSettings } = useSettingsStore.getState();
-        if (user && isReadestCloudStorageActive(currentSettings)) {
+        if (target !== 'local' && user && isReadestCloudStorageActive(currentSettings)) {
           const booksToUpload = uniqueNewBooks.filter((b) => !b.uploadedAt);
           if (booksToUpload.length > 0) {
             setTimeout(() => {
