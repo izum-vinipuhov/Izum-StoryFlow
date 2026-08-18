@@ -2232,7 +2232,6 @@
   "Audiobook: {{duration}} · {{count}} chapters_many": "Аудиокнига: {{duration}} · {{count}} глав",
   "Audiobook: {{duration}} · {{count}} chapters_other": "Аудиокнига: {{duration}} · {{count}} главы",
   "≈{{size}} per chapter": "≈{{size}} на главу",
-  "Download Audiobook": "Скачать аудиокнигу",
   "Yandex token saved": "Токен Яндекса сохранён",
   "Yandex token cleared": "Токен Яндекса очищен",
   "Enter your Yandex Books token. It is stored with your account settings and sent only to Yandex.": "Введите токен Яндекс Книг. Он сохраняется в настройках аккаунта и отправляется только Яндексу.",
@@ -2247,5 +2246,13 @@
   "No audiobook available for this book": "Для этой книги нет аудиокниги",
   "Could not download the audiobook": "Не удалось загрузить аудиокнигу",
   "Could not download the chapter": "Не удалось загрузить главу",
-  "No audiobook chapters downloaded yet": "Аудиокнига ещё не скачана"
+  "No audiobook chapters downloaded yet": "Аудиокнига ещё не скачана",
+  "Configure server": "Настроить на сервер",
+  "Enter a valid server address": "Введите корректный адрес сервера",
+  "Could not reach a Readest server at this address": "Не удалось подключиться к серверу Readest по этому адресу",
+  "This address does not look like a Readest server": "Похоже, по этому адресу нет сервера Readest",
+  "Enter the address of your Readest server. The app will sign in and sync with it.": "Введите адрес вашего сервера Readest. Приложение будет входить и синхронизироваться с ним.",
+  "Where to download the book": "Куда загрузить книгу",
+  "Locally": "Локально",
+  "To server": "На сервер"
 }

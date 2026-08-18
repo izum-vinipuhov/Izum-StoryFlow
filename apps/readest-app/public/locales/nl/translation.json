@@ -2118,7 +2118,6 @@
   "Audiobook: {{duration}} · {{count}} chapters_one": "__STRING_NOT_TRANSLATED__",
   "Audiobook: {{duration}} · {{count}} chapters_other": "__STRING_NOT_TRANSLATED__",
   "≈{{size}} per chapter": "__STRING_NOT_TRANSLATED__",
-  "Download Audiobook": "__STRING_NOT_TRANSLATED__",
   "Yandex token saved": "__STRING_NOT_TRANSLATED__",
   "Yandex token cleared": "__STRING_NOT_TRANSLATED__",
   "Enter your Yandex Books token. It is stored with your account settings and sent only to Yandex.": "__STRING_NOT_TRANSLATED__",
@@ -2133,5 +2132,13 @@
   "No audiobook available for this book": "__STRING_NOT_TRANSLATED__",
   "Could not download the audiobook": "__STRING_NOT_TRANSLATED__",
   "Could not download the chapter": "__STRING_NOT_TRANSLATED__",
-  "No audiobook chapters downloaded yet": "__STRING_NOT_TRANSLATED__"
+  "No audiobook chapters downloaded yet": "__STRING_NOT_TRANSLATED__",
+  "Configure server": "__STRING_NOT_TRANSLATED__",
+  "Enter a valid server address": "__STRING_NOT_TRANSLATED__",
+  "Could not reach a Readest server at this address": "__STRING_NOT_TRANSLATED__",
+  "This address does not look like a Readest server": "__STRING_NOT_TRANSLATED__",
+  "Enter the address of your Readest server. The app will sign in and sync with it.": "__STRING_NOT_TRANSLATED__",
+  "Where to download the book": "__STRING_NOT_TRANSLATED__",
+  "Locally": "__STRING_NOT_TRANSLATED__",
+  "To server": "__STRING_NOT_TRANSLATED__"
 }
