@@ -10,6 +10,7 @@ import {
   yandexDownloadsManager,
   type YandexJobSpec,
 } from '@/services/yandex/yandexDownloadsManager';
+import { updateYandexImportIndex } from '@/services/yandex/yandexImportIndex';
 
 /**
  * Where a Yandex download should end up: `server` mirrors the manual OPDS
@@ -63,6 +64,22 @@ export function useYandexDownloads() {
                 transferManager.queueUpload(book);
               }
             }, 3000);
+          }
+        }
+
+        // Remember which local book each Yandex resource turned into, so a
+        // later search can show the part as already downloaded. Never throws.
+        if (imported[0]) {
+          if (spec.resourceType === 'book') {
+            await updateYandexImportIndex(appService, {
+              books: { [spec.id]: { bookHash: imported[0].hash } },
+            });
+          } else if (spec.resourceType === 'audiobook' && spec.audiobook?.attachToBookHash) {
+            await updateYandexImportIndex(appService, {
+              audiobooks: {
+                [spec.audiobook.hash]: { attachToBookHash: spec.audiobook.attachToBookHash },
+              },
+            });
           }
         }
       };

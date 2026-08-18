@@ -6,8 +6,18 @@ const mocks = vi.hoisted(() => ({
   saveLibraryBooks: vi.fn<(books: Book[]) => Promise<void>>(async () => {}),
   queueUpload: vi.fn(),
   startJob: vi.fn(),
+  readFile: vi.fn<() => Promise<string | ArrayBuffer>>(async () => {
+    throw new Error('ENOENT');
+  }),
+  writeFile: vi.fn<
+    (path: string, base: string, content: string | ArrayBuffer | File) => Promise<void>
+  >(async () => {}),
 }));
-const appService = { saveLibraryBooks: mocks.saveLibraryBooks };
+const appService = {
+  saveLibraryBooks: mocks.saveLibraryBooks,
+  readFile: mocks.readFile,
+  writeFile: mocks.writeFile,
+};
 
 vi.mock('@/context/EnvContext', () => ({
   useEnv: () => ({ appService }),
@@ -118,5 +128,57 @@ describe('useYandexDownloads', () => {
     });
 
     expect(mocks.queueUpload).toHaveBeenCalledTimes(1);
+  });
+
+  test('records the ebook hash in the yandex import index on import', async () => {
+    const { result } = renderHook(() => useYandexDownloads());
+
+    await act(async () => {
+      await result.current.startDownload(
+        { id: 'Abc123', resourceType: 'book', title: '', author: '', coverUrl: '', files: [] },
+        { target: 'local' },
+      );
+    });
+    await act(async () => {
+      await jobDeps?.onBooksImported?.([makeBook('h1')]);
+    });
+
+    expect(mocks.writeFile).toHaveBeenCalledTimes(1);
+    const [path, base, content] = mocks.writeFile.mock.calls[0]!;
+    expect(path).toBe('yandex-imports.json');
+    expect(base).toBe('Books');
+    const index = JSON.parse(content as string) as {
+      books: Record<string, { bookHash: string }>;
+    };
+    expect(index.books['Abc123']).toEqual({ bookHash: 'h1' });
+  });
+
+  test('records the audiobook attach target on audiobook import', async () => {
+    const { result } = renderHook(() => useYandexDownloads());
+
+    await act(async () => {
+      await result.current.startDownload(
+        {
+          id: 'TsY5HyiY::audiobook',
+          resourceType: 'audiobook',
+          title: '',
+          author: '',
+          coverUrl: '',
+          files: [],
+          audiobook: { hash: 'ah1', attachToBookHash: 'e1', chapters: [] },
+        },
+        { target: 'local' },
+      );
+    });
+    await act(async () => {
+      await jobDeps?.onBooksImported?.([makeBook('e1')]);
+    });
+
+    expect(mocks.writeFile).toHaveBeenCalledTimes(1);
+    const content = mocks.writeFile.mock.calls[0]![2] as string;
+    const index = JSON.parse(content) as {
+      audiobooks: Record<string, { attachToBookHash: string }>;
+    };
+    expect(index.audiobooks['ah1']).toEqual({ attachToBookHash: 'e1' });
   });
 });

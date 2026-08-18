@@ -1,13 +1,22 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
-import { MdDownload, MdSearch } from 'react-icons/md';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  MdCheck,
+  MdClose,
+  MdDownload,
+  MdPause,
+  MdPlayArrow,
+  MdRefresh,
+  MdSearch,
+} from 'react-icons/md';
 import { RiBook2Fill, RiHeadphoneFill } from 'react-icons/ri';
 import Dialog from '@/components/Dialog';
 import SegmentedControl from '@/components/SegmentedControl';
+import { useEnv } from '@/context/EnvContext';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useSettingsStore } from '@/store/settingsStore';
-import { eventDispatcher } from '@/utils/event';
+import { useYandexDownloadsStore, type YandexDownloadJob } from '@/store/yandexDownloadsStore';
 import { formatBytes } from '@/utils/book';
 import { useYandexDownloads, type YandexDownloadTarget } from '@/hooks/useYandexDownloads';
 import { setYandexTokenDialogVisible } from './YandexTokenDialog';
@@ -24,12 +33,21 @@ import {
   probeFileSize,
 } from '@/services/yandex/client';
 import {
+  yandexDownloadsManager,
+  type YandexJobSpec,
+} from '@/services/yandex/yandexDownloadsManager';
+import {
+  computeAudiobookPartState,
+  computeEbookPartState,
+  loadYandexImportIndex,
+  type YandexPartAvailability,
+} from '@/services/yandex/yandexImportIndex';
+import {
   getAttachedAudiobookChapterPath,
   getAudiobookChapterPath,
   getAudiobookManifestHash,
 } from '@/utils/audiobook';
 import type { YandexAudiobookInfo, YandexBookInfo, YandexTrack } from '@/services/yandex/types';
-import type { YandexJobSpec } from '@/services/yandex/yandexDownloadsManager';
 
 interface YandexImportDialogProps {
   isOpen: boolean;
@@ -46,6 +64,9 @@ interface SearchInfo {
     firstChapterBytes: number | null;
   };
 }
+
+type YandexPartKey = 'book' | 'audiobook';
+type YandexPartState = YandexPartAvailability | 'downloading' | 'paused' | 'failed';
 
 const formatDuration = (sec: number, _: (key: string) => string): string => {
   const hours = Math.floor(sec / 3600);
@@ -66,29 +87,38 @@ const getAuthors = (info: { authors?: Array<{ name: string } | string> | string 
 /**
  * Modal for the import menu's "Yandex URL" entry: paste a books.yandex.ru
  * link, look the book up via the Yandex Books API, and start a download for
- * the ebook and/or audiobook formats the link resolves to.
+ * the ebook and/or audiobook formats the link resolves to. The dialog stays
+ * open while jobs run and shows per-part progress with pause/cancel controls.
  */
 const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose }) => {
   const _ = useTranslation();
+  const { appService } = useEnv();
   const { startDownload } = useYandexDownloads();
   const { settings } = useSettingsStore();
+  const jobs = useYandexDownloadsStore((state) => state.jobs);
   const [url, setUrl] = useState('');
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<SearchInfo | null>(null);
-  const [downloading, setDownloading] = useState(false);
+  const [partStates, setPartStates] = useState<
+    Partial<Record<YandexPartKey, YandexPartAvailability>>
+  >({});
   const [downloadTarget, setDownloadTarget] = useState<YandexDownloadTarget>('server');
+  const urlInputRef = useRef<HTMLInputElement>(null);
 
-  // Reset transient state every time the dialog reopens.
-  useEffect(() => {
-    if (!isOpen) return;
+  const reset = useCallback(() => {
     setUrl('');
     setSearching(false);
     setError(null);
     setInfo(null);
-    setDownloading(false);
+    setPartStates({});
     setDownloadTarget('server');
-  }, [isOpen]);
+  }, []);
+
+  // Reset transient state every time the dialog reopens.
+  useEffect(() => {
+    if (isOpen) reset();
+  }, [isOpen, reset]);
 
   const submit = async () => {
     const target = url.trim();
@@ -110,6 +140,7 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
     }
     setSearching(true);
     setInfo(null);
+    setPartStates({});
     try {
       const [bookResult, audiobookResult] = await Promise.allSettled([
         fetchBookInfo(parsed.uuid, token),
@@ -161,12 +192,55 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
         }
       }
       setInfo(nextInfo);
+      // Snapshot which parts are already on this device so repeated searches
+      // can disable the finished part instead of offering a re-download.
+      if (appService) {
+        const index = await loadYandexImportIndex(appService);
+        setPartStates({
+          book: nextInfo.book
+            ? await computeEbookPartState(appService, index, nextInfo.book.uuid)
+            : undefined,
+          audiobook: nextInfo.audiobook
+            ? await computeAudiobookPartState(
+                appService,
+                index,
+                buildChapters(nextInfo.audiobook.tracks).map(({ title, durationSec }) => ({
+                  title,
+                  durationSec,
+                })),
+              )
+            : undefined,
+        });
+      }
     } catch (e) {
       setError(e instanceof Error ? _(e.message) : _('Could not fetch this book'));
     } finally {
       setSearching(false);
     }
   };
+
+  // The Dialog stops keydown propagation (a shared shortcut guard), so
+  // React's onKeyDown never fires for inputs inside it — listen natively.
+  useEffect(() => {
+    const input = urlInputRef.current;
+    if (!input) return;
+    const listener = (event: KeyboardEvent) => {
+      if (event.key === 'Enter') void submit();
+    };
+    input.addEventListener('keydown', listener);
+    return () => input.removeEventListener('keydown', listener);
+  }, [submit]);
+
+  /**
+   * Chapter list feeding the audiobook manifest hash — shared between the
+   * download spec and the availability check so both hash the same input.
+   */
+  const buildChapters = (tracks: YandexTrack[]) =>
+    tracks.map((track, index) => ({
+      title: track.title ?? _('Chapter {{number}}', { number: index + 1 }),
+      durationSec: getTrackDurationSec(track),
+      sizeBytes: 0,
+    }));
 
   const buildEbookSpec = (): YandexJobSpec => ({
     id: info!.book!.uuid,
@@ -186,11 +260,7 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
 
   const buildAudiobookSpec = (attachToBookHash?: string): YandexJobSpec => {
     const { tracks } = info!.audiobook!;
-    const chapters = tracks.map((track, index) => ({
-      title: track.title ?? _('Chapter {{number}}', { number: index + 1 }),
-      durationSec: getTrackDurationSec(track),
-      sizeBytes: 0,
-    }));
+    const chapters = buildChapters(tracks);
     const hash = getAudiobookManifestHash(
       chapters.map(({ title, durationSec }) => ({ title, durationSec })),
     );
@@ -199,7 +269,10 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
         ? getAttachedAudiobookChapterPath(attachToBookHash, index)
         : getAudiobookChapterPath(hash, index);
     return {
-      id: info!.uuid,
+      // Distinct ids per variant: the ebook job keeps the plain uuid, and the
+      // chained full-download audiobook must not collide with it (or with a
+      // standalone audiobook job of the same uuid).
+      id: attachToBookHash ? `${info!.uuid}::attached-audiobook` : `${info!.uuid}::audiobook`,
       resourceType: 'audiobook',
       title: info!.audiobook!.info.title,
       author: getAuthors(info!.audiobook!.info),
@@ -216,35 +289,166 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
 
   const startEbookDownload = async () => {
     if (!info?.book) return;
-    setDownloading(true);
     await startDownload(buildEbookSpec(), { target: downloadTarget });
-    eventDispatcher.dispatch('toast', { type: 'info', message: _('Download started') });
-    onClose();
   };
 
   const startAudiobookDownload = async () => {
     if (!info?.audiobook) return;
-    setDownloading(true);
     await startDownload(buildAudiobookSpec(), { target: downloadTarget });
-    eventDispatcher.dispatch('toast', { type: 'info', message: _('Download started') });
-    onClose();
   };
 
   /**
    * Download the ebook first, then chain the audiobook onto the imported
-   * book — both formats end up as a single library entry.
+   * book — both formats end up as a single library entry. The dialog stays
+   * open and shows the per-part progress.
    */
   const startFullDownload = async () => {
     if (!info?.book || !info?.audiobook) return;
-    setDownloading(true);
     await startDownload(buildEbookSpec(), {
       target: downloadTarget,
       onBookImported: (book) => {
         void startDownload(buildAudiobookSpec(book.hash), { target: downloadTarget });
       },
     });
-    eventDispatcher.dispatch('toast', { type: 'info', message: _('Download started') });
-    onClose();
+  };
+
+  // A part's live state: an active/kept job row overrides the availability
+  // snapshot taken at search time (a completed job means the files are local).
+  const findPartJob = (part: YandexPartKey): YandexDownloadJob | undefined => {
+    if (!info) return undefined;
+    if (part === 'book') return jobs.find((job) => job.id === info.book?.uuid);
+    return jobs.find(
+      (job) =>
+        job.id === `${info.uuid}::audiobook` || job.id === `${info.uuid}::attached-audiobook`,
+    );
+  };
+
+  const partState = (part: YandexPartKey): YandexPartState => {
+    const job = findPartJob(part);
+    if (job) return job.status === 'completed' ? 'downloaded' : job.status;
+    return partStates[part] ?? 'not-downloaded';
+  };
+
+  const bookState = partState('book');
+  const audioState = partState('audiobook');
+  const hasActivePart =
+    bookState === 'downloading' ||
+    bookState === 'paused' ||
+    audioState === 'downloading' ||
+    audioState === 'paused';
+  const anyPartNotDownloaded = bookState === 'not-downloaded' || audioState === 'not-downloaded';
+  const showDownloadFully =
+    !!info?.book &&
+    !!info?.audiobook &&
+    bookState === 'not-downloaded' &&
+    audioState === 'not-downloaded';
+  // When every offered part is already on this device there is nothing left
+  // to download — hide the part buttons entirely.
+  const offeredPartsDownloaded =
+    (!info?.book || bookState === 'downloaded') &&
+    (!info?.audiobook || audioState === 'downloaded');
+
+  const partCell = (
+    part: YandexPartKey,
+    label: string,
+    icon: React.ReactNode,
+    onDownload: () => void,
+  ) => {
+    const state = partState(part);
+    const job = findPartJob(part);
+    if (state === 'downloaded') {
+      return (
+        <button type='button' className='btn btn-contrast btn-sm' disabled>
+          <MdCheck className='h-4 w-4' />
+          {icon}
+          {_('Downloaded')}
+        </button>
+      );
+    }
+    if ((state === 'downloading' || state === 'paused') && job) {
+      return (
+        <div className='col-span-2 flex items-center gap-2 rounded-lg border border-base-200 p-2 eink-bordered'>
+          <div className='bg-base-300 h-1.5 flex-1 overflow-hidden rounded-full'>
+            <div
+              className='bg-primary h-full transition-all'
+              style={{
+                width: `${
+                  job.totalBytes ? Math.min(100, (job.downloadedBytes / job.totalBytes) * 100) : 0
+                }%`,
+              }}
+            />
+          </div>
+          <span className='text-base-content/60 shrink-0 text-xs'>
+            {job.totalBytes
+              ? `${formatBytes(job.downloadedBytes)} / ${formatBytes(job.totalBytes)}`
+              : formatBytes(job.downloadedBytes)}
+          </span>
+          {job.status === 'downloading' && (
+            <button
+              type='button'
+              className='btn btn-ghost btn-sm btn-circle'
+              aria-label={_('Pause')}
+              onClick={() => yandexDownloadsManager.pauseJob(job.id)}
+            >
+              <MdPause className='h-4 w-4' />
+            </button>
+          )}
+          {job.status === 'paused' && (
+            <button
+              type='button'
+              className='btn btn-ghost btn-sm btn-circle'
+              aria-label={_('Resume')}
+              onClick={() => yandexDownloadsManager.resumeJob(job.id)}
+            >
+              <MdPlayArrow className='h-4 w-4' />
+            </button>
+          )}
+          <button
+            type='button'
+            className='btn btn-ghost btn-sm btn-circle'
+            aria-label={_('Cancel')}
+            onClick={() => void yandexDownloadsManager.cancelJob(job.id)}
+          >
+            <MdClose className='h-4 w-4' />
+          </button>
+        </div>
+      );
+    }
+    if (state === 'failed' && job) {
+      return (
+        <div className='col-span-2 flex items-center gap-2 rounded-lg border border-base-200 p-2 eink-bordered'>
+          <span className='text-error flex-1 truncate text-sm'>{job.error ?? _('Failed')}</span>
+          <button
+            type='button'
+            className='btn btn-ghost btn-sm btn-circle'
+            aria-label={_('Retry')}
+            onClick={() => yandexDownloadsManager.resumeJob(job.id)}
+          >
+            <MdRefresh className='h-4 w-4' />
+          </button>
+          <button
+            type='button'
+            className='btn btn-ghost btn-sm btn-circle'
+            aria-label={_('Dismiss')}
+            onClick={() => useYandexDownloadsStore.getState().removeJob(job.id)}
+          >
+            <MdClose className='h-4 w-4' />
+          </button>
+        </div>
+      );
+    }
+    return (
+      <button
+        type='button'
+        className='btn btn-contrast btn-sm'
+        onClick={onDownload}
+        disabled={hasActivePart}
+      >
+        <MdDownload className='h-4 w-4' />
+        {icon}
+        {label}
+      </button>
+    );
   };
 
   const coverUrl = info?.book?.info.cover?.large ?? info?.audiobook?.info.cover?.large ?? '';
@@ -262,18 +466,31 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
         <p className='text-base-content/60 text-sm leading-relaxed'>
           {_('Paste a books.yandex.ru or bookmate.ru link')}
         </p>
-        <input
-          type='url'
-          autoFocus
-          className='input input-bordered eink-bordered placeholder:text-base-content/35 w-full'
-          placeholder='https://books.yandex.ru/audiobooks/…'
-          value={url}
-          disabled={searching || downloading}
-          onChange={(e) => setUrl(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') void submit();
-          }}
-        />
+        <div className='relative'>
+          <input
+            ref={urlInputRef}
+            type='url'
+            autoFocus
+            className='input input-bordered eink-bordered placeholder:text-base-content/35 w-full pe-10'
+            placeholder='https://books.yandex.ru/audiobooks/…'
+            value={url}
+            disabled={searching}
+            onChange={(e) => setUrl(e.target.value)}
+          />
+          {info && (
+            <button
+              type='button'
+              aria-label={_('Clear search')}
+              className='btn btn-ghost btn-xs btn-circle absolute right-1.5 top-1/2 -translate-y-1/2'
+              onClick={() => {
+                reset();
+                urlInputRef.current?.focus();
+              }}
+            >
+              <MdClose className='h-4 w-4' />
+            </button>
+          )}
+        </div>
         {error && <p className='text-error text-sm leading-relaxed'>{error}</p>}
 
         {info && (
@@ -342,52 +559,46 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
           )}
           {info && (
             <>
-              <div className='flex flex-col gap-1.5'>
-                <p className='text-base-content/60 text-sm'>{_('Where to download the book')}</p>
-                <SegmentedControl<YandexDownloadTarget>
-                  options={[
-                    { value: 'local', label: _('Locally') },
-                    { value: 'server', label: _('To server') },
-                  ]}
-                  value={downloadTarget}
-                  onChange={setDownloadTarget}
-                  disabled={downloading}
-                  fullWidth
-                  ariaLabel={_('Where to download the book')}
-                />
-              </div>
-              <div className='grid grid-cols-2 gap-2'>
-                {info.book && (
-                  <button
-                    type='button'
-                    className='btn btn-contrast btn-sm'
-                    onClick={() => void startEbookDownload()}
-                    disabled={downloading}
-                  >
-                    <MdDownload className='h-4 w-4' />
-                    <RiBook2Fill className='h-4 w-4' />
-                    {_('Book')}
-                  </button>
-                )}
-                {info.audiobook && (
-                  <button
-                    type='button'
-                    className='btn btn-contrast btn-sm'
-                    onClick={() => void startAudiobookDownload()}
-                    disabled={downloading}
-                  >
-                    <MdDownload className='h-4 w-4' />
-                    <RiHeadphoneFill className='h-4 w-4' />
-                    {_('Audiobook')}
-                  </button>
-                )}
-              </div>
-              {info.book && info.audiobook && (
+              {anyPartNotDownloaded && (
+                <div className='flex flex-col gap-1.5'>
+                  <p className='text-base-content/60 text-sm'>{_('Where to download the book')}</p>
+                  <SegmentedControl<YandexDownloadTarget>
+                    options={[
+                      { value: 'local', label: _('Locally') },
+                      { value: 'server', label: _('To server') },
+                    ]}
+                    value={downloadTarget}
+                    onChange={setDownloadTarget}
+                    disabled={hasActivePart}
+                    fullWidth
+                    ariaLabel={_('Where to download the book')}
+                  />
+                </div>
+              )}
+              {!offeredPartsDownloaded && (
+                <div className='grid grid-cols-2 gap-2'>
+                  {info.book &&
+                    partCell(
+                      'book',
+                      _('Book'),
+                      <RiBook2Fill className='h-4 w-4' />,
+                      () => void startEbookDownload(),
+                    )}
+                  {info.audiobook &&
+                    partCell(
+                      'audiobook',
+                      _('Audiobook'),
+                      <RiHeadphoneFill className='h-4 w-4' />,
+                      () => void startAudiobookDownload(),
+                    )}
+                </div>
+              )}
+              {showDownloadFully && (
                 <button
                   type='button'
                   className='btn btn-primary btn-sm w-full'
                   onClick={() => void startFullDownload()}
-                  disabled={downloading}
+                  disabled={hasActivePart}
                 >
                   <MdDownload className='h-4 w-4' />
                   {_('Download Fully')}
@@ -397,7 +608,7 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
                 type='button'
                 className='btn btn-ghost btn-sm eink-bordered w-full'
                 onClick={onClose}
-                disabled={downloading}
+                disabled={hasActivePart}
               >
                 {_('Cancel')}
               </button>

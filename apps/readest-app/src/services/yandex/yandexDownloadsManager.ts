@@ -120,7 +120,7 @@ class YandexDownloadsManager {
       const token = getYandexAccessToken(deps.settings);
       if (!token) {
         store().updateJob(id, { status: 'failed', error: 'Set your Yandex Books token first' });
-        this.contexts.delete(id);
+        // Keep the context so resumeJob can retry once the user sets a token.
         return;
       }
 
@@ -246,10 +246,11 @@ class YandexDownloadsManager {
         this.contexts.delete(id);
         return;
       }
-      // Genuine failure — keep the row visible with the error.
+      // Genuine failure — keep the row visible with the error. The context
+      // stays so resumeJob can retry; it is dropped on success, cancel or
+      // reset().
       const message = error instanceof Error ? error.message : String(error);
       store().updateJob(id, { status: 'failed', error: message });
-      this.contexts.delete(id);
     }
   }
 
