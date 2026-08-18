@@ -61,6 +61,6 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     }
 
     let section = CPListSection(items: [item])
-    return CPListTemplate(title: "Readest", sections: [section])
+    return CPListTemplate(title: "Izum StoryFlow", sections: [section])
   }
 }

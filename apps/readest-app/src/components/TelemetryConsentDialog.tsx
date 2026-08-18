@@ -66,11 +66,11 @@ export default function TelemetryConsentDialog({ open, onClose }: TelemetryConse
               <LuChartLine size={22} strokeWidth={1.75} />
             </div>
             <h3 className='text-base-content text-base font-semibold tracking-tight'>
-              {_('Help improve Readest')}
+              {_('Help improve Izum StoryFlow')}
             </h3>
             <p className='text-base-content/65 text-[13px] leading-relaxed'>
               {_(
-                'Share anonymous usage data so we can understand how Readest is used and make it better.',
+                'Share anonymous usage data so we can understand how Izum StoryFlow is used and make it better.',
               )}
             </p>
           </div>

@@ -1645,7 +1645,7 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets }> = ({
       accept: '.json,application/json',
       extensions: ['json'],
       multiple: false,
-      dialogTitle: _('Select Readest Annotations File'),
+      dialogTitle: _('Select Izum StoryFlow Annotations File'),
     });
     if (result.error || result.files.length === 0) return;
 
@@ -1663,7 +1663,7 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets }> = ({
     if (!payload) {
       eventDispatcher.dispatch('toast', {
         type: 'warning',
-        message: _('This is not a Readest annotations file.'),
+        message: _('This is not an Izum StoryFlow annotations file.'),
         timeout: 3000,
       });
       return;

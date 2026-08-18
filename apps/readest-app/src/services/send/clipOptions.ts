@@ -35,11 +35,11 @@ export interface ClipOptions {
 export function getClipOptions(_: Translate): ClipOptions {
   const { bg, fg } = getThemeCode();
   return {
-    windowTitle: _('Saving to your Readest library…'),
-    overlayTitle: _('Saving to Readest'),
+    windowTitle: _('Saving to your Izum StoryFlow library…'),
+    overlayTitle: _('Saving to Izum StoryFlow'),
     loadingStatus: _('Loading article…'),
     capturingStatus: _('Capturing article…'),
-    savedTitle: _('Saved to Readest'),
+    savedTitle: _('Saved to Izum StoryFlow'),
     background: bg,
     foreground: fg,
     signInHint: _('Sign in if needed, then capture'),

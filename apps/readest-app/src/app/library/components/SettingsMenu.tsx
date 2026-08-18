@@ -460,8 +460,8 @@ const SettingsMenu: React.FC<SettingsMenuProps> = ({ onPullLibrary, setIsDropdow
               label={_('Set PIN…')}
               tooltip={
                 appService?.isMobileApp
-                  ? _('Require a PIN (and biometrics, if available) to open Readest')
-                  : _('Require a 4-digit PIN to open Readest')
+                  ? _('Require a PIN (and biometrics, if available) to open Izum StoryFlow')
+                  : _('Require a 4-digit PIN to open Izum StoryFlow')
               }
               onClick={() => openAppLockDialog('set')}
             />
@@ -500,7 +500,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = ({ onPullLibrary, setIsDropdow
         onClick={handleOpenYandexDownloads}
       />
       <hr aria-hidden='true' className='border-base-200 my-1' />
-      <MenuItem label={_('About Readest')} onClick={showAboutReadest} />
+      <MenuItem label={_('About Izum StoryFlow')} onClick={showAboutReadest} />
     </Menu>
   );
 };

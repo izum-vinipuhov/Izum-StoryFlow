@@ -1,8 +1,8 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "Readest",
+  "productName": "Izum StoryFlow",
   "mainBinaryName": "readest",
-  "identifier": "com.bilingify.readest",
+  "identifier": "com.izum.vinipuhov.storyflow",
   "version": "../package.json",
   "build": {
     "frontendDist": "../out",

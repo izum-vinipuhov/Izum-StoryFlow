@@ -8,28 +8,27 @@ import Providers from '@/components/Providers';
 import '../styles/globals.css';
 
 const url = 'https://web.readest.com/';
-const title = 'Readest — Where You Read, Digest and Get Insight';
+const title = 'Izum StoryFlow — Read, Listen, and Take Your Library Anywhere';
 const description =
-  'Discover Readest, the ultimate online ebook reader for immersive and organized reading. ' +
-  'Enjoy seamless access to your digital library, powerful tools for highlighting, bookmarking, ' +
-  'and note-taking, and support for multiple book views. ' +
-  'Perfect for deep reading, analysis, and understanding. Explore now!';
+  'Discover Izum StoryFlow, a free and open-source ebook reader and library manager created by ' +
+  'Izum Vinipuhov. Read books in any format, listen to audiobooks, sync your library across ' +
+  'devices, or deploy your own self-hosted cloud storage — your books, your way.';
 const previewImage = 'https://cdn.readest.com/images/open_graph_preview_read_now.png';
 
 export const metadata: Metadata = {
   metadataBase: new URL(url),
   title: {
     default: title,
-    template: '%s | Readest',
+    template: '%s | Izum StoryFlow',
   },
   description,
   generator: 'Next.js',
   manifest: '/manifest.json',
-  keywords: ['epub', 'pdf', 'ebook', 'reader', 'readest', 'pwa'],
+  keywords: ['epub', 'pdf', 'ebook', 'reader', 'audiobook', 'izum', 'storyflow', 'pwa'],
   authors: [
     {
-      name: 'readest',
-      url: 'https://github.com/readest/readest',
+      name: 'Izum Vinipuhov',
+      url: 'https://github.com/izum-vinipuhov/Izum-StoryFlow',
     },
   ],
   icons: {
@@ -38,7 +37,7 @@ export const metadata: Metadata = {
   },
   appleWebApp: {
     capable: true,
-    title: 'Readest',
+    title: 'Izum StoryFlow',
     statusBarStyle: 'default',
   },
   openGraph: {

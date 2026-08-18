@@ -1,6 +1,6 @@
 name: Readest
 options:
-  bundleIdPrefix: com.bilingify.readest
+  bundleIdPrefix: com.izum.vinipuhov.storyflow
   deploymentTarget:
     iOS: 15.0
 fileGroups: [../../src]
@@ -15,7 +15,7 @@ settingGroups:
   app:
     base:
       PRODUCT_NAME: Readest
-      PRODUCT_BUNDLE_IDENTIFIER: com.bilingify.readest
+      PRODUCT_BUNDLE_IDENTIFIER: com.izum.vinipuhov.storyflow
       DEVELOPMENT_TEAM: J5W48D69VR
 targetTemplates:
   app:
@@ -35,7 +35,7 @@ targets:
     # NOTE on In-App Purchase capability
     # ----------------------------------
     # IAP is enabled at three layers:
-    #   1. App ID `com.bilingify.readest` services (Apple Developer
+    #   1. App ID `com.izum.vinipuhov.storyflow` services (Apple Developer
     #      portal) — must have "In-App Purchase" service ON.
     #   2. Provisioning profile — pulled automatically by Xcode when
     #      DEVELOPMENT_TEAM is set; inherits IAP from the App ID.
@@ -150,7 +150,7 @@ targets:
     info:
       path: ShareExtension/Info.plist
       properties:
-        CFBundleDisplayName: Readest
+        CFBundleDisplayName: Izum StoryFlow
         NSExtension:
           NSExtensionPointIdentifier: com.apple.share-services
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShareViewController
@@ -177,7 +177,7 @@ targets:
     settings:
       base:
         PRODUCT_NAME: ShareExtension
-        PRODUCT_BUNDLE_IDENTIFIER: com.bilingify.readest.ShareExtension
+        PRODUCT_BUNDLE_IDENTIFIER: com.izum.vinipuhov.storyflow.ShareExtension
         DEVELOPMENT_TEAM: J5W48D69VR
         CODE_SIGN_ENTITLEMENTS: ShareExtension/ShareExtension.entitlements
         # Do NOT set CODE_SIGN_ALLOW_ENTITLEMENTS_MODIFICATION here. This
@@ -210,13 +210,13 @@ targets:
     info:
       path: ReadestWidget/Info.plist
       properties:
-        CFBundleDisplayName: Readest
+        CFBundleDisplayName: Izum StoryFlow
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
     settings:
       base:
         PRODUCT_NAME: ReadestWidget
-        PRODUCT_BUNDLE_IDENTIFIER: com.bilingify.readest.ReadestWidget
+        PRODUCT_BUNDLE_IDENTIFIER: com.izum.vinipuhov.storyflow.ReadestWidget
         DEVELOPMENT_TEAM: J5W48D69VR
         CODE_SIGN_ENTITLEMENTS: ReadestWidget/ReadestWidget.entitlements
         # CODE_SIGN_ALLOW_ENTITLEMENTS_MODIFICATION is intentionally omitted

@@ -31,7 +31,7 @@ export default function AuthPanel({
       <div className='flex flex-col items-center gap-3 text-center'>
         <Image src='/icon.png' alt='' width={56} height={56} className='eink-bordered rounded-xl' />
         <div>
-          <h1 className='text-xl font-semibold tracking-tight'>{_('Sign in to Readest')}</h1>
+          <h1 className='text-xl font-semibold tracking-tight'>{_('Sign in to Izum StoryFlow')}</h1>
           <p className='text-base-content/70 mt-1.5 text-sm leading-relaxed'>
             {_('Sync your library, reading progress, and highlights across your devices.')}
           </p>

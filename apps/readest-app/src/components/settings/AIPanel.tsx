@@ -750,7 +750,7 @@ const AIPanel: React.FC = () => {
             ? _(
                 'Uses Turso vector search + CFI-anchored citations. The model decides when to look up passages instead of getting them stuffed into the system prompt.',
               )
-            : _('Reedy is desktop-only in this beta. Use the Readest desktop app to try it.')
+            : _('Reedy is desktop-only in this beta. Use the Izum StoryFlow desktop app to try it.')
         }
       >
         <SettingsSwitchRow

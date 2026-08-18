@@ -195,7 +195,7 @@ export default function SendPage() {
           </div>
           <p className='text-base-content/70 text-xs leading-relaxed'>
             {_(
-              'Install the Readest browser extension to send the article you are reading to your library. It clips the page from your browser so paywalled and login-only sites still work.',
+              'Install the Send to Readest browser extension to send the article you are reading to your library. It clips the page from your browser so paywalled and login-only sites still work.',
             )}
           </p>
         </section>
