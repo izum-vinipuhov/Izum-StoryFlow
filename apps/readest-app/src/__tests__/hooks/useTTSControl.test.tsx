@@ -1,5 +1,8 @@
 import { act, cleanup, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+// Resolves to the mocked constructor below; used to build a session
+// controller fixture that passes the hook's instanceof guard.
+import { TTSController } from '@/services/tts';
 
 // --- Dependency mocks (must be set up before importing the hook) ---
 
@@ -934,7 +937,7 @@ describe('useTTSControl background session lifecycle', () => {
   });
 
   it('adopts a live session for the same book without constructing a controller', async () => {
-    const liveController = {
+    const liveController = Object.assign(Object.create(TTSController.prototype), {
       state: 'playing',
       terminated: false,
       isViewAttached: false,
@@ -960,7 +963,7 @@ describe('useTTSControl background session lifecycle', () => {
       addEventListener: vi.fn(),
       removeEventListener: vi.fn(),
       redispatchPosition: vi.fn(),
-    };
+    });
     mockSessionManager.getSessionByHash.mockReturnValue({
       bookHash: 'book',
       bookKey: 'book-old',
@@ -979,6 +982,24 @@ describe('useTTSControl background session lifecycle', () => {
       mockView,
       expect.objectContaining({ bookKey: 'book-1' }),
     );
+  });
+
+  it('does not adopt a session owned by the attached-audiobook player', async () => {
+    // The audiobook claims the same session slot with its own player, which
+    // is NOT a TTSController. Adopting it would flip ttsEnabled and route the
+    // Speak button to tts-stop, whose handleStop shutdown() bricks the
+    // audiobook player permanently.
+    mockSessionManager.getSessionByHash.mockReturnValue({
+      bookHash: 'book',
+      bookKey: 'book-1',
+      controller: { state: 'playing', terminated: false },
+    });
+    render(<Harness />);
+    await act(async () => {
+      for (let i = 0; i < 10; i++) await Promise.resolve();
+    });
+
+    expect(mockSessionManager.adopt).not.toHaveBeenCalled();
   });
 });
 

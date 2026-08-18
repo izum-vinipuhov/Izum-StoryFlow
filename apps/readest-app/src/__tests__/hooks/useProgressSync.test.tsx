@@ -30,8 +30,10 @@ const h = vi.hoisted(() => {
     progress: [number, number];
     location: string;
     updatedAt: number;
-    audioPosition?: { chapterIndex: number; positionSec: number };
-    viewSettings?: { audioPosition?: { chapterIndex: number; positionSec: number } };
+    audioPosition?: { chapterIndex: number; positionSec: number; updatedAt?: number };
+    viewSettings?: {
+      audioPosition?: { chapterIndex: number; positionSec: number; updatedAt?: number };
+    };
   };
   const libraryBook = { hash: 'h1', updatedAt: 2000, progress: [5, 100] as [number, number] };
 
@@ -529,6 +531,32 @@ describe('useProgressSync', () => {
 
     expect(h.saveConfigMock).not.toHaveBeenCalled();
     expect(h.setConfigMock).not.toHaveBeenCalled();
+  });
+
+  test('adopts a stamped remote audioPosition even when the local config is fresher', async () => {
+    // LWW keys on the position's own save stamp, not config.updatedAt: a
+    // text page-turn bumping the local config must not block the newer
+    // position from a peer device.
+    h.config.audioPosition = { chapterIndex: 1, positionSec: 30, updatedAt: 100 };
+    h.config.viewSettings = { audioPosition: { chapterIndex: 1, positionSec: 30, updatedAt: 100 } };
+    h.config.updatedAt = 99999;
+    const remotePos = { chapterIndex: 9, positionSec: 9999, updatedAt: 5000 };
+    h.state.syncedConfigs = [
+      {
+        bookHash: 'h1',
+        metaHash: 'm1',
+        updatedAt: 5000,
+        viewSettings: { audioPosition: remotePos },
+      },
+    ];
+    renderHook(() => useProgressSync('h1-view1'));
+    await advance(0);
+
+    expect(h.setConfigMock).toHaveBeenCalledWith('h1-view1', {
+      audioPosition: remotePos,
+      viewSettings: { audioPosition: remotePos },
+    });
+    expect(h.saveConfigMock).toHaveBeenCalledTimes(1);
   });
 
   test('adopts the remote audioPosition even when its timestamp is older, if the local has none', async () => {

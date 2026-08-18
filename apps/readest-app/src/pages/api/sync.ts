@@ -96,6 +96,52 @@ export function buildStatusPropagationRow(
 }
 
 /**
+ * Field-level last-writer-wins for the attached-audiobook position inside a
+ * configs row's view_settings JSON: the side whose audioPosition carries the
+ * newer `updatedAt` — the moment the listener actually saved it — keeps its
+ * position, regardless of which side wins the whole row by config updated_at.
+ * Without this, a stale device that turns text pages (bumping its
+ * config.updatedAt) overwrites a peer's newer playback position with its old
+ * one on push, and the peer can no longer push back (its own updated_at is
+ * older) — the position regresses permanently.
+ *
+ * Positions from before stamping fall back to whole-row LWW (the winner
+ * keeps its own); a stamped side always beats an unstamped one. Returns the
+ * view_settings string the final row should carry, or the winner's original
+ * string when nothing needs grafting.
+ */
+export function resolveAudioPositionMerge(
+  clientViewSettings: string | null | undefined,
+  serverViewSettings: string | null | undefined,
+  clientRowWins: boolean,
+): string | null | undefined {
+  const parse = (s: string | null | undefined): Record<string, unknown> | null => {
+    if (!s) return null;
+    try {
+      return JSON.parse(s) as Record<string, unknown>;
+    } catch {
+      return null;
+    }
+  };
+  const clientVs = parse(clientViewSettings);
+  const serverVs = parse(serverViewSettings);
+  const winnerVs = clientRowWins ? clientVs : serverVs;
+  const winnerRaw = clientRowWins ? clientViewSettings : serverViewSettings;
+  const loserVs = clientRowWins ? serverVs : clientVs;
+  const loserPos = loserVs?.['audioPosition'] as
+    | { chapterIndex: number; positionSec: number; updatedAt?: number }
+    | undefined;
+  if (!loserPos) return winnerRaw;
+  const winnerPos = winnerVs?.['audioPosition'] as
+    | { chapterIndex: number; positionSec: number; updatedAt?: number }
+    | undefined;
+  const winnerStamp = winnerPos?.updatedAt ?? 0;
+  const loserStamp = loserPos.updatedAt ?? 0;
+  if (loserStamp <= winnerStamp) return winnerRaw;
+  return JSON.stringify({ ...(winnerVs ?? {}), audioPosition: loserPos });
+}
+
+/**
  * Field-level last-writer-wins for a books row's cover: return the
  * {cover_hash, cover_updated_at} with the newer cover_updated_at (ties →
  * client). NULL timestamp = epoch 0. A cover edit shares the row with
@@ -648,6 +694,38 @@ export async function POST(req: NextRequest) {
               } else {
                 batchAuthoritativeRecords.push(serverData);
               }
+            }
+          } else if (table === 'book_configs') {
+            // The audiobook position merges on its own clock (listen time)
+            // regardless of the whole-row winner — see the helper's docs.
+            const clientConfig = dbRec as DBBookConfig;
+            const serverConfig = serverData as BookDataRecord & { view_settings?: string | null };
+            const mergedClient = resolveAudioPositionMerge(
+              clientConfig.view_settings,
+              serverConfig.view_settings,
+              true,
+            );
+            const mergedServer = resolveAudioPositionMerge(
+              clientConfig.view_settings,
+              serverConfig.view_settings,
+              false,
+            );
+            if (clientIsNewer) {
+              clientConfig.view_settings = mergedClient ?? undefined;
+              toUpdate.push(clientConfig);
+            } else if (
+              mergedServer !== (serverConfig.view_settings ?? null) &&
+              mergedServer != null
+            ) {
+              // Graft onto the server row and advance updated_at so peers
+              // re-pull it through the updated_at cursor.
+              toUpdate.push({
+                ...serverData,
+                view_settings: mergedServer,
+                updated_at: new Date().toISOString(),
+              } as unknown as DBBookConfig);
+            } else {
+              batchAuthoritativeRecords.push(serverData);
             }
           } else if (clientIsNewer) {
             toUpdate.push(dbRec);

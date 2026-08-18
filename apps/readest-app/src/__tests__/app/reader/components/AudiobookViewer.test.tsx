@@ -43,7 +43,7 @@ const appService = {
 };
 
 type SavedConfig = {
-  audioPosition?: { chapterIndex: number; positionSec: number };
+  audioPosition?: { chapterIndex: number; positionSec: number; updatedAt?: number };
   progress?: [number, number];
 };
 
@@ -152,7 +152,8 @@ describe('AudiobookViewer', () => {
     await waitFor(() => {
       expect(appService.saveBookConfig).toHaveBeenCalled();
     });
-    expect(lastSavedConfig()?.audioPosition).toEqual({ chapterIndex: 0, positionSec: 50 });
+    expect(lastSavedConfig()?.audioPosition).toMatchObject({ chapterIndex: 0, positionSec: 50 });
+    expect(lastSavedConfig()?.audioPosition?.updatedAt).toBeTypeOf('number');
     expect(lastSavedConfig()?.progress).toEqual([50, 300]);
   });
 
@@ -191,7 +192,7 @@ describe('AudiobookViewer', () => {
     unmount();
 
     await waitFor(() => {
-      expect(lastSavedConfig()?.audioPosition).toEqual({ chapterIndex: 0, positionSec: 33 });
+      expect(lastSavedConfig()?.audioPosition).toMatchObject({ chapterIndex: 0, positionSec: 33 });
     });
   });
 
@@ -215,9 +216,15 @@ describe('AudiobookViewer', () => {
     // The first syncConfigs call is the mount pull; pick the push call.
     const pushCall = syncH.syncState.syncConfigs.mock.calls.find((c) => c[3] === 'push')!;
     const payload = pushCall[0] as {
-      viewSettings?: { audioPosition?: { chapterIndex: number; positionSec: number } };
+      viewSettings?: {
+        audioPosition?: { chapterIndex: number; positionSec: number; updatedAt?: number };
+      };
     }[];
-    expect(payload[0]?.viewSettings?.audioPosition).toEqual({ chapterIndex: 0, positionSec: 50 });
+    expect(payload[0]?.viewSettings?.audioPosition).toMatchObject({
+      chapterIndex: 0,
+      positionSec: 50,
+    });
+    expect(payload[0]?.viewSettings?.audioPosition?.updatedAt).toBeTypeOf('number');
   });
 
   it('pushes at most once per 15s window', async () => {
