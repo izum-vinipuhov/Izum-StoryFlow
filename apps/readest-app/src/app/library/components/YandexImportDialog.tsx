@@ -4,11 +4,12 @@ import React, { useEffect, useState } from 'react';
 import { MdDownload, MdSearch } from 'react-icons/md';
 import { RiBook2Fill, RiHeadphoneFill } from 'react-icons/ri';
 import Dialog from '@/components/Dialog';
+import SegmentedControl from '@/components/SegmentedControl';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useSettingsStore } from '@/store/settingsStore';
 import { eventDispatcher } from '@/utils/event';
 import { formatBytes } from '@/utils/book';
-import { useYandexDownloads } from '@/hooks/useYandexDownloads';
+import { useYandexDownloads, type YandexDownloadTarget } from '@/hooks/useYandexDownloads';
 import { setYandexTokenDialogVisible } from './YandexTokenDialog';
 import {
   YANDEX_API_BASE,
@@ -76,6 +77,7 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<SearchInfo | null>(null);
   const [downloading, setDownloading] = useState(false);
+  const [downloadTarget, setDownloadTarget] = useState<YandexDownloadTarget>('server');
 
   // Reset transient state every time the dialog reopens.
   useEffect(() => {
@@ -85,6 +87,7 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
     setError(null);
     setInfo(null);
     setDownloading(false);
+    setDownloadTarget('server');
   }, [isOpen]);
 
   const submit = async () => {
@@ -214,7 +217,7 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
   const startEbookDownload = async () => {
     if (!info?.book) return;
     setDownloading(true);
-    await startDownload(buildEbookSpec());
+    await startDownload(buildEbookSpec(), { target: downloadTarget });
     eventDispatcher.dispatch('toast', { type: 'info', message: _('Download started') });
     onClose();
   };
@@ -222,7 +225,7 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
   const startAudiobookDownload = async () => {
     if (!info?.audiobook) return;
     setDownloading(true);
-    await startDownload(buildAudiobookSpec());
+    await startDownload(buildAudiobookSpec(), { target: downloadTarget });
     eventDispatcher.dispatch('toast', { type: 'info', message: _('Download started') });
     onClose();
   };
@@ -235,8 +238,9 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
     if (!info?.book || !info?.audiobook) return;
     setDownloading(true);
     await startDownload(buildEbookSpec(), {
+      target: downloadTarget,
       onBookImported: (book) => {
-        void startDownload(buildAudiobookSpec(book.hash));
+        void startDownload(buildAudiobookSpec(book.hash), { target: downloadTarget });
       },
     });
     eventDispatcher.dispatch('toast', { type: 'info', message: _('Download started') });
@@ -338,6 +342,20 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
           )}
           {info && (
             <>
+              <div className='flex flex-col gap-1.5'>
+                <p className='text-base-content/60 text-sm'>{_('Where to download the book')}</p>
+                <SegmentedControl<YandexDownloadTarget>
+                  options={[
+                    { value: 'local', label: _('Locally') },
+                    { value: 'server', label: _('To server') },
+                  ]}
+                  value={downloadTarget}
+                  onChange={setDownloadTarget}
+                  disabled={downloading}
+                  fullWidth
+                  ariaLabel={_('Where to download the book')}
+                />
+              </div>
               <div className='grid grid-cols-2 gap-2'>
                 {info.book && (
                   <button

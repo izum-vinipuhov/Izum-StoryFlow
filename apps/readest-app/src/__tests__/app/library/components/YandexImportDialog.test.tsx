@@ -252,4 +252,41 @@ describe('YandexImportDialog', () => {
     expect(spec.audiobook.chapters[0]!.title).toBe('Chapter {{number}}');
     expect(onClose).toHaveBeenCalled();
   });
+
+  it('offers the download-target toggle and defaults to the server', async () => {
+    clientMocks.fetchBookInfo.mockResolvedValue({
+      title: 'Книга',
+      cover: { large: 'https://covers/book.jpeg' },
+      authors: [{ name: 'Автор' }],
+    });
+    clientMocks.fetchAudiobookInfo.mockRejectedValue(new Error('Audiobook not found'));
+
+    render(<YandexImportDialog isOpen onClose={vi.fn()} />);
+    await search('https://books.yandex.ru/books/Abc123');
+
+    expect(await screen.findByText('Where to download the book')).toBeTruthy();
+    const serverOption = screen.getByRole('radio', { name: 'To server' });
+    expect(serverOption.getAttribute('aria-checked')).toBe('true');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Book' }));
+    await waitFor(() => expect(startDownloadMock).toHaveBeenCalledTimes(1));
+    expect(startDownloadMock.mock.calls[0]![1]).toMatchObject({ target: 'server' });
+  });
+
+  it('passes the local target when "Locally" is selected', async () => {
+    clientMocks.fetchBookInfo.mockResolvedValue({
+      title: 'Книга',
+      cover: { large: 'https://covers/book.jpeg' },
+      authors: [{ name: 'Автор' }],
+    });
+    clientMocks.fetchAudiobookInfo.mockRejectedValue(new Error('Audiobook not found'));
+
+    render(<YandexImportDialog isOpen onClose={vi.fn()} />);
+    await search('https://books.yandex.ru/books/Abc123');
+
+    fireEvent.click(await screen.findByRole('radio', { name: 'Locally' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Book' }));
+    await waitFor(() => expect(startDownloadMock).toHaveBeenCalledTimes(1));
+    expect(startDownloadMock.mock.calls[0]![1]).toMatchObject({ target: 'local' });
+  });
 });
