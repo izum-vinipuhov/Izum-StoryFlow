@@ -15,8 +15,54 @@ declare global {
   }
 }
 
-export const getRuntimeConfig = () =>
-  typeof window === 'undefined' ? undefined : window.__READEST_RUNTIME_CONFIG;
+export const getRuntimeConfig = () => {
+  if (typeof window === 'undefined') return undefined;
+  if (!window.__READEST_RUNTIME_CONFIG) {
+    // Tauri builds are statically exported, so /runtime-config.js is never
+    // served. A custom self-hosted server configured in the sign-in dialog
+    // ("Configure server") is applied as a fallback so supabase, sync and
+    // storage all point at the user's own server — mirroring how the web
+    // build receives this config from the server itself.
+    const stored = loadStoredServerConfig();
+    if (stored) window.__READEST_RUNTIME_CONFIG = stored.config;
+  }
+  return window.__READEST_RUNTIME_CONFIG;
+};
+
+export interface StoredServerConfig {
+  serverUrl: string;
+  config: ReadestRuntimeConfig;
+}
+
+const STORED_SERVER_CONFIG_KEY = 'readest_custom_server';
+
+export const loadStoredServerConfig = (): StoredServerConfig | null => {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(STORED_SERVER_CONFIG_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as StoredServerConfig;
+    if (
+      parsed &&
+      typeof parsed.serverUrl === 'string' &&
+      parsed.config &&
+      typeof parsed.config === 'object'
+    ) {
+      return parsed;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+};
+
+export const saveStoredServerConfig = (serverConfig: StoredServerConfig) => {
+  window.localStorage.setItem(STORED_SERVER_CONFIG_KEY, JSON.stringify(serverConfig));
+};
+
+export const clearStoredServerConfig = () => {
+  window.localStorage.removeItem(STORED_SERVER_CONFIG_KEY);
+};
 
 export const getServerRuntimeConfig = (): ReadestRuntimeConfig => ({
   // Browser runtime config should prefer a public Supabase URL when provided.
