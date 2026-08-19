@@ -1,5 +1,5 @@
 import clsx from 'clsx';
-import { MdLink, MdMenuBook, MdRssFeed } from 'react-icons/md';
+import { MdLibraryMusic, MdLink, MdMenuBook, MdRssFeed } from 'react-icons/md';
 import { LuLibrary } from 'react-icons/lu';
 import { IoFileTray } from 'react-icons/io5';
 import { PiGear } from 'react-icons/pi';
@@ -13,6 +13,7 @@ export interface ImportMenuProps {
   menuClassName?: string;
   setIsDropdownOpen?: (open: boolean) => void;
   onImportBooksFromFiles: () => void;
+  onImportHybrid?: () => void;
   onImportBooksFromDirectory?: () => void;
   onImportBookFromUrl?: () => void;
   onImportBookFromNovelUrl?: () => void;
@@ -26,6 +27,7 @@ const ImportMenu: React.FC<ImportMenuProps> = ({
   menuClassName,
   setIsDropdownOpen,
   onImportBooksFromFiles,
+  onImportHybrid,
   onImportBooksFromDirectory,
   onImportBookFromUrl,
   onImportBookFromNovelUrl,
@@ -39,6 +41,11 @@ const ImportMenu: React.FC<ImportMenuProps> = ({
 
   const handleImportFromFiles = () => {
     onImportBooksFromFiles();
+    setIsDropdownOpen?.(false);
+  };
+
+  const handleImportHybrid = () => {
+    onImportHybrid?.();
     setIsDropdownOpen?.(false);
   };
 
@@ -90,6 +97,13 @@ const ImportMenu: React.FC<ImportMenuProps> = ({
         Icon={<IoFileTray className='h-5 w-5' />}
         onClick={handleImportFromFiles}
       />
+      {onImportHybrid && (
+        <MenuItem
+          label={_('Hybrid')}
+          Icon={<MdLibraryMusic className='h-5 w-5' />}
+          onClick={handleImportHybrid}
+        />
+      )}
       {onImportBooksFromDirectory && (
         <MenuItem
           label={_('From Directory')}

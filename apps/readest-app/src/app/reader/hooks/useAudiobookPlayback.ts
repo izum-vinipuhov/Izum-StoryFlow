@@ -368,7 +368,7 @@ export function useAudiobookPlayback(bookKey: string): UseAudiobookPlaybackResul
       const files = await appService.readDirectory(dir, 'Books').catch(() => []);
       const chapterFiles = files
         .map((file) => file.path)
-        .filter((path) => /^chapter_\d{3}\.m4a$/.test(path))
+        .filter((path) => /^chapter_\d{3}\.[a-z0-9]+$/.test(path))
         .sort();
       if (chapterFiles.length > 0) {
         loaded = {

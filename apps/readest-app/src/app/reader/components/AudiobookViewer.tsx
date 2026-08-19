@@ -18,7 +18,7 @@ import { useSettingsStore } from '@/store/settingsStore';
 import { getMediaSession } from '@/libs/mediaSession';
 import { AUDIO_MIME_TYPES } from '@/services/tts/mediaOverlay/MediaOverlayClient';
 import { DEFAULT_BOOK_SEARCH_CONFIG } from '@/services/constants';
-import { getAudiobookChapterPath, isRemoteAudioPositionNewer } from '@/utils/audiobook';
+import { isRemoteAudioPositionNewer } from '@/utils/audiobook';
 import { serializeConfig } from '@/utils/serializer';
 import { createProgressThrottle } from '@/utils/transfer';
 import type { AudiobookManifest } from '@/types/audiobook';
@@ -179,13 +179,13 @@ const AudiobookViewer: React.FC<AudiobookViewerProps> = ({ bookKey }) => {
       try {
         setLoading(true);
         setError(null);
-        const data = (await appService.readFile(
-          getAudiobookChapterPath(id, index),
-          'Books',
-          'binary',
-        )) as ArrayBuffer;
+        // The manifest records each chapter's actual file (Yandex chapters
+        // are m4a, hybrid imports preserve the picked audio extension), so
+        // read that path instead of recomputing an m4a name.
+        const data = (await appService.readFile(chapter.file, 'Books', 'binary')) as ArrayBuffer;
         if (audio.src) URL.revokeObjectURL(audio.src);
-        const blob = new Blob([data], { type: AUDIO_MIME_TYPES['m4a'] });
+        const ext = chapter.file.split('.').pop()?.toLowerCase() ?? '';
+        const blob = new Blob([data], { type: AUDIO_MIME_TYPES[ext] ?? 'audio/mpeg' });
         audio.src = URL.createObjectURL(blob);
         audio.preservesPitch = true;
         audio.playbackRate = rate;
