@@ -2089,5 +2089,22 @@
   "Share anonymous usage data so we can understand how Izum StoryFlow is used and make it better.": "Izum StoryFlow བཀོལ་སྤྱོད་ཇི་ལྟར་བྱས་པ་རྟོགས་ཤིང་ལེགས་སྒྱུར་གྱི་ཆེད་དུ་མིང་མེད་སྤྱོད་སྦྱོར་གྱི་གནས་ཚུལ་མཉམ་སྤྱོད་གནང་རོགས།",
   "Saving to your Izum StoryFlow library…": "ཁྱེད་ཀྱི་ Izum StoryFlow དཔེ་མཛོད་དུ་ཉར་བཞིན་པ་…",
   "Saving to Izum StoryFlow": "Izum StoryFlow དུ་ཉར་བཞིན་པ་",
-  "Saved to Izum StoryFlow": "Izum StoryFlow དུ་ཉར་ཟིན།"
+  "Saved to Izum StoryFlow": "Izum StoryFlow དུ་ཉར་ཟིན།",
+  "Select at least a book file or audio files": "__STRING_NOT_TRANSLATED__",
+  "Failed to import": "__STRING_NOT_TRANSLATED__",
+  "Hybrid": "__STRING_NOT_TRANSLATED__",
+  "Ebook file (optional)": "__STRING_NOT_TRANSLATED__",
+  "Select book": "__STRING_NOT_TRANSLATED__",
+  "Audio files (optional)": "__STRING_NOT_TRANSLATED__",
+  "duration unknown": "__STRING_NOT_TRANSLATED__",
+  "(order by filename)": "__STRING_NOT_TRANSLATED__",
+  "Scanning audio files...": "__STRING_NOT_TRANSLATED__",
+  "Select audio files": "__STRING_NOT_TRANSLATED__",
+  "Cover image (optional)": "__STRING_NOT_TRANSLATED__",
+  "If set, the book cover is not extracted automatically": "__STRING_NOT_TRANSLATED__",
+  "Where to save the book": "__STRING_NOT_TRANSLATED__",
+  "Log in and enable Readest Cloud to upload to server": "__STRING_NOT_TRANSLATED__",
+  "Invalid file selection": "__STRING_NOT_TRANSLATED__",
+  "Invalid book file": "__STRING_NOT_TRANSLATED__",
+  "Failed to import book": "__STRING_NOT_TRANSLATED__"
 }

@@ -25,6 +25,11 @@ import { navigateToLibrary, navigateToLogin, navigateToReader } from '@/utils/na
 import { getBookWithUpdatedMetadata, listFormater } from '@/utils/book';
 import { getImportErrorMessage } from '@/services/errors';
 import { ingestFile } from '@/services/ingestService';
+import {
+  importHybrid,
+  type HybridImportSelection,
+  type HybridTarget,
+} from '@/services/hybrid/hybridImport';
 import { eventDispatcher } from '@/utils/event';
 import { ProgressPayload } from '@/utils/transfer';
 import { throttle } from '@/utils/throttle';
@@ -117,6 +122,7 @@ import ImportFromFolderDialog, {
 import ImportFromUrlDialog from './components/ImportFromUrlDialog';
 import ImportNovelDialog from './components/ImportNovelDialog';
 import YandexImportDialog from './components/YandexImportDialog';
+import HybridImportDialog from './components/HybridImportDialog';
 import YandexTokenDialog, { setYandexTokenDialogVisible } from './components/YandexTokenDialog';
 import YandexDownloadsPanel from './components/YandexDownloadsPanel';
 import NowPlayingBar from './components/NowPlayingBar';
@@ -256,6 +262,7 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
   const [showAddFeed, setShowAddFeed] = useState(false);
   const [showImportFromUrl, setShowImportFromUrl] = useState(false);
   const [showYandexImport, setShowYandexImport] = useState(false);
+  const [showHybridImport, setShowHybridImport] = useState(false);
   const [showImportNovel, setShowImportNovel] = useState(false);
   const [importMenuAnchor, setImportMenuAnchor] = useState<HTMLElement | null>(null);
   const [loading, setLoading] = useState(false);
@@ -1292,6 +1299,54 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
     importBooks(files, getImportTargetGroupId());
   });
 
+  const handleImportHybrid = (
+    selection: HybridImportSelection,
+    target: HybridTarget,
+  ): Promise<{ ok: boolean; error?: string }> =>
+    enqueueImportRun(async () => {
+      try {
+        if (!appService) {
+          return { ok: false, error: _('App service is not available') };
+        }
+        const { library } = useLibraryStore.getState();
+        const lookupIndex = buildBookLookupIndex(library, appService?.osPlatform);
+        const groupId = getImportTargetGroupId();
+        const { book } = await importHybrid({
+          appService,
+          books: library,
+          lookupIndex,
+          selection,
+          groupId,
+          groupName: getGroupName(groupId),
+        });
+        await updateBooks(envConfig, [book]);
+        pushLibrary();
+        eventDispatcher.dispatch('toast', {
+          message: _('Successfully imported {{count}} book(s)', { count: 1 }),
+          timeout: 2000,
+          type: 'success',
+        });
+        // Mirror the Yandex "To server" flow: queue the cloud upload a moment
+        // after the import so the transfer manager reads the freshly written
+        // audiobook manifest. The "Locally" target never auto-uploads — the
+        // book's upload button covers syncing later.
+        if (
+          target === 'server' &&
+          user &&
+          isReadestCloudStorageActive(useSettingsStore.getState().settings)
+        ) {
+          if (!book.uploadedAt) {
+            setTimeout(() => {
+              transferManager.queueUpload(book);
+            }, 3000);
+          }
+        }
+        return { ok: true };
+      } catch (e) {
+        return { ok: false, error: e instanceof Error ? e.message : _('Failed to import') };
+      }
+    });
+
   const handleImportBookFromUrl = async (url: string) => {
     // Tauri-only. Routes through the Rust `clip_url` command which spawns
     // a hidden Tauri webview, loads the URL with the real browser engine
@@ -1893,6 +1948,7 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
           isSelectAll={isSelectAll}
           onPullLibrary={pullLibrary}
           onImportBooksFromFiles={handleImportBooksFromFiles}
+          onImportHybrid={() => setShowHybridImport(true)}
           onImportBooksFromDirectory={
             appService?.canReadExternalDir ? handleImportBooksFromDirectory : undefined
           }
@@ -2062,6 +2118,7 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
           anchor={importMenuAnchor}
           onClose={() => setImportMenuAnchor(null)}
           onImportBooksFromFiles={handleImportBooksFromFiles}
+          onImportHybrid={() => setShowHybridImport(true)}
           onImportBooksFromDirectory={
             appService?.canReadExternalDir ? handleImportBooksFromDirectory : undefined
           }
@@ -2182,6 +2239,11 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
         onImport={handleImportNovelFile}
       />
       <YandexImportDialog isOpen={showYandexImport} onClose={() => setShowYandexImport(false)} />
+      <HybridImportDialog
+        isOpen={showHybridImport}
+        onClose={() => setShowHybridImport(false)}
+        onImport={handleImportHybrid}
+      />
       <YandexTokenDialog />
       <YandexDownloadsPanel />
       <ClipSignInAlert />

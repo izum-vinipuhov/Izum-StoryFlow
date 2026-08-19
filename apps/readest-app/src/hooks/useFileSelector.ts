@@ -198,7 +198,10 @@ export const FILE_SELECTION_PRESETS = {
   },
   audio: {
     accept: 'audio/*',
-    extensions: ['mp3', 'wav', 'ogg', 'flac', 'm4a'],
+    // Hybrid import chapters: mp3, flac, m4b, ogg and opus are the common
+    // audiobook formats; the rest are accepted too, the player resolves the
+    // MIME type from the preserved extension.
+    extensions: ['mp3', 'flac', 'm4b', 'ogg', 'opus', 'm4a', 'aac', 'wav', 'mp4', 'oga'],
     dialogTitle: _('Select Audio'),
   },
   books: {

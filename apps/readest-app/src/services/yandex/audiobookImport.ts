@@ -19,6 +19,12 @@ export interface ImportAudiobookOptions {
   author: string;
   coverUrl: string;
   chapters: { title: string; durationSec: number; sizeBytes: number }[];
+  /**
+   * Chapter file path for a given manifest index. Defaults to the Yandex
+   * layout (`<hash>/chapter_NNN.m4a`); non-Yandex importers (hybrid import)
+   * pass their own naming to preserve arbitrary audio extensions.
+   */
+  fileFor?: (index: number) => string;
 }
 
 const sanitizeChapters = (
@@ -84,8 +90,9 @@ export const importAudiobook = async (
   const existing = books.find((book) => book.hash === hash && !book.deletedAt);
   if (existing) return existing;
 
-  const chapters = sanitizeChapters(options.chapters, (index) =>
-    getAudiobookChapterPath(hash, index),
+  const chapters = sanitizeChapters(
+    options.chapters,
+    options.fileFor ?? ((index) => getAudiobookChapterPath(hash, index)),
   );
   const manifest: AudiobookManifest = {
     schemaVersion: 1,
@@ -132,6 +139,13 @@ export interface ImportAttachedAudiobookOptions {
   title: string;
   author: string;
   chapters: { title: string; durationSec: number; sizeBytes: number }[];
+  /**
+   * Chapter file path for a given manifest index. Defaults to the Yandex
+   * layout (`<hash>/audiobook/chapter_NNN.m4a`); non-Yandex importers
+   * (hybrid import) pass their own naming to preserve arbitrary audio
+   * extensions.
+   */
+  fileFor?: (index: number) => string;
 }
 
 /**
@@ -148,8 +162,9 @@ export const importAttachedAudiobook = async (
   const book = books.find((b) => b.hash === hash && !b.deletedAt);
   if (!book) return null;
 
-  const chapters = sanitizeChapters(options.chapters, (index) =>
-    getAttachedAudiobookChapterPath(hash, index),
+  const chapters = sanitizeChapters(
+    options.chapters,
+    options.fileFor ?? ((index) => getAttachedAudiobookChapterPath(hash, index)),
   );
   const manifest: AudiobookManifest = {
     schemaVersion: 1,

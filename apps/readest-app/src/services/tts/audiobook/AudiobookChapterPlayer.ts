@@ -1,6 +1,5 @@
 import type { AppService } from '@/types/system';
 import type { AudiobookChapter, AudiobookManifest } from '@/types/audiobook';
-import { getAttachedAudiobookChapterPath } from '@/utils/audiobook';
 import { AUDIO_MIME_TYPES } from '../mediaOverlay/MediaOverlayClient';
 
 export interface AudiobookPlaybackInfo {
@@ -21,7 +20,6 @@ type AudiobookPlayerState = 'stopped' | 'playing' | 'paused';
 export class AudiobookChapterPlayer extends EventTarget {
   private audio: HTMLAudioElement | null = null;
   private appService: AppService | null = null;
-  private bookHash = '';
   private chapters: AudiobookChapter[] = [];
   private currentIndex = -1;
   private rate = 1;
@@ -58,9 +56,8 @@ export class AudiobookChapterPlayer extends EventTarget {
     return this._terminated;
   }
 
-  attachBook(appService: AppService, bookHash: string) {
+  attachBook(appService: AppService, _bookHash: string) {
     this.appService = appService;
-    this.bookHash = bookHash;
   }
 
   setManifest(manifest: AudiobookManifest) {
@@ -98,18 +95,18 @@ export class AudiobookChapterPlayer extends EventTarget {
     const audio = (this.audio ??= new Audio());
     audio.preservesPitch = true;
     audio.playbackRate = this.rate;
-    const data = (await this.appService.readFile(
-      getAttachedAudiobookChapterPath(this.bookHash, index),
-      'Books',
-      'binary',
-    )) as ArrayBuffer;
-    const blob = new Blob([data], { type: AUDIO_MIME_TYPES['m4a'] });
+    // The manifest records each chapter's actual file (Yandex chapters are
+    // m4a, hybrid imports preserve the picked audio extension), so read that
+    // path instead of recomputing an m4a name.
+    const chapter = this.chapters[index]!;
+    const data = (await this.appService.readFile(chapter.file, 'Books', 'binary')) as ArrayBuffer;
+    const ext = chapter.file.split('.').pop()?.toLowerCase() ?? '';
+    const blob = new Blob([data], { type: AUDIO_MIME_TYPES[ext] ?? 'audio/mpeg' });
     audio.src = URL.createObjectURL(blob);
     audio.currentTime = startSec;
     this.currentIndex = index;
     this.positionSec = startSec;
 
-    const chapter = this.chapters[index]!;
     this.dispatchEvent(
       new CustomEvent('tts-speak-mark', {
         detail: { offset: 0, name: chapter.title, text: chapter.title, language: 'ru' },

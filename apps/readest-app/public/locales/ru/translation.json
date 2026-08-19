@@ -2260,5 +2260,22 @@
   "Share anonymous usage data so we can understand how Izum StoryFlow is used and make it better.": "Поделитесь анонимными данными об использовании, чтобы мы могли понять, как используется Izum StoryFlow, и улучшить его.",
   "Saving to your Izum StoryFlow library…": "Сохранение в вашу библиотеку Izum StoryFlow…",
   "Saving to Izum StoryFlow": "Сохранение в Izum StoryFlow",
-  "Saved to Izum StoryFlow": "Сохранено в Izum StoryFlow"
+  "Saved to Izum StoryFlow": "Сохранено в Izum StoryFlow",
+  "Select at least a book file or audio files": "Выберите файл книги или аудиофайлы",
+  "Failed to import": "Не удалось импортировать",
+  "Hybrid": "Гибрид",
+  "Ebook file (optional)": "Файл книги (необязательно)",
+  "Select book": "Выбрать книгу",
+  "Audio files (optional)": "Аудиофайлы (необязательно)",
+  "duration unknown": "длительность неизвестна",
+  "(order by filename)": "(по имени файла)",
+  "Scanning audio files...": "Читаем метаданные аудиофайлов...",
+  "Select audio files": "Выбрать аудиофайлы",
+  "Cover image (optional)": "Обложка (необязательно)",
+  "If set, the book cover is not extracted automatically": "Если задана, обложка книги автоматически не извлекается",
+  "Where to save the book": "Куда сохранить книгу",
+  "Log in and enable Readest Cloud to upload to server": "Войдите в аккаунт и включите Readest Cloud, чтобы загружать на сервер",
+  "Invalid file selection": "Недопустимый выбор файла",
+  "Invalid book file": "Недопустимый файл книги",
+  "Failed to import book": "Не удалось импортировать книгу"
 }
