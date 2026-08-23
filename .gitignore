@@ -22,6 +22,9 @@ docker/.env
 *.pem
 /certs
 
+# IDEs
+.idea/
+
 # debug
 npm-debug.log*
 yarn-debug.log*
