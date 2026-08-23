@@ -2,10 +2,8 @@ import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import { useEnv } from '@/context/EnvContext';
 import { useTranslation } from '@/hooks/useTranslation';
-import { useSettingsStore } from '@/store/settingsStore';
-import { checkForAppUpdates, checkAppReleaseNotes } from '@/helpers/updater';
 import { parseWebViewInfo } from '@/utils/ua';
-import { getAppVersion } from '@/utils/version';
+import { getAppVersion, READEST_BASE_VERSION } from '@/utils/version';
 import { writeTextToClipboard } from '@/utils/clipboard';
 import { eventDispatcher } from '@/utils/event';
 import SupportLinks from './SupportLinks';
@@ -23,13 +21,9 @@ export const setAboutDialogVisible = (visible: boolean) => {
   }
 };
 
-type UpdateStatus = 'checking' | 'updating' | 'updated' | 'error';
-
 export const AboutWindow = () => {
   const _ = useTranslation();
   const { appService } = useEnv();
-  const { settings } = useSettingsStore();
-  const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
   const [browserInfo, setBrowserInfo] = useState('');
   const [isOpen, setIsOpen] = useState(false);
 
@@ -53,33 +47,8 @@ export const AboutWindow = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleCheckUpdate = async () => {
-    setUpdateStatus('checking');
-    try {
-      const hasUpdate = await checkForAppUpdates(_, false, settings.updateChannel);
-      if (hasUpdate) {
-        handleClose();
-      } else {
-        setUpdateStatus('updated');
-      }
-    } catch (error) {
-      console.info('Error checking for updates:', error);
-      setUpdateStatus('error');
-    }
-  };
-
-  const handleShowRecentUpdates = async () => {
-    const hasNotes = await checkAppReleaseNotes(false);
-    if (hasNotes) {
-      handleClose();
-    } else {
-      setUpdateStatus('error');
-    }
-  };
-
   const handleClose = () => {
     setIsOpen(false);
-    setUpdateStatus(null);
   };
 
   const versionInfo = `${_('Version {{version}}', { version: getAppVersion() })} (${browserInfo})`;
@@ -121,27 +90,9 @@ export const AboutWindow = () => {
               >
                 {versionInfo}
               </button>
-            </div>
-            <div className='my-1 h-5'>
-              {!updateStatus && (
-                <button
-                  className='btn btn-sm btn-primary cursor-pointer p-1 text-xs'
-                  onClick={appService?.hasUpdater ? handleCheckUpdate : handleShowRecentUpdates}
-                >
-                  {_('Check Update')}
-                </button>
-              )}
-              {updateStatus === 'updated' && (
-                <p className='text-neutral-content mt-2 text-xs'>
-                  {_('Already the latest version')}
-                </p>
-              )}
-              {updateStatus === 'checking' && (
-                <p className='text-neutral-content mt-2 text-xs'>{_('Checking for updates...')}</p>
-              )}
-              {updateStatus === 'error' && (
-                <p className='text-error mt-2 text-xs'>{_('Error checking for updates')}</p>
-              )}
+              <p className='text-neutral-content mt-1 text-center text-xs'>
+                {_('Based on Readest {{version}}', { version: READEST_BASE_VERSION })}
+              </p>
             </div>
           </div>
 

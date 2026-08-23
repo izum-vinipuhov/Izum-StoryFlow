@@ -28,6 +28,7 @@ Izum StoryFlow is an open-source ebook reader designed for immersive and deep re
 - 🎁 **Unlimited access** to all app features
 - 🧩 **Hybrid import** — the menu now lets you import books, audiobooks, or book + audiobook, download audiobooks from Yandex Books, and set up the Yandex API key
 - 🔌 **Client-server mode** — connect the app to your own sync server
+- 🎧 **Audiobook streaming** — stream audiobooks straight from your server without downloading them
 - 📚 **Bookshelves** — organize your books on custom shelves
 
 <p align="center">
@@ -93,6 +94,19 @@ A window will open where you can enter your server address in the form `http://h
 <p align="center">
   <img src="./data/screenshots/configure_server.jpg" alt="Configure server" width="620" />
 </p>
+
+Self-hosted servers run a **shared library** by default: every book uploaded
+to the server (including server-side Yandex downloads) is visible to all
+accounts, while reading positions, notes and settings stay per-user. To keep
+the library private to each uploader, set `SHARED_LIBRARY=false` in the
+server's environment — see `docker/README.md` for details.
+
+### Streaming Audiobooks from the Server
+
+Audiobooks on your server play without downloading — chapters stream on
+demand as you listen. This works for books uploaded to the server and for
+server-side Yandex downloads: open the audiobook and press play, no files are
+saved to the device.
 
 <p align="center">
   <a href="#whats-new">What's New</a> •

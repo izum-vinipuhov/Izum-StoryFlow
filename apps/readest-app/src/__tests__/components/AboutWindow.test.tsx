@@ -23,21 +23,13 @@ vi.mock('@/context/EnvContext', () => ({
   useEnv: () => ({ appService: { hasUpdater: true } }),
 }));
 
-vi.mock('@/store/settingsStore', () => ({
-  useSettingsStore: () => ({ settings: { updateChannel: 'stable' } }),
-}));
-
-vi.mock('@/helpers/updater', () => ({
-  checkForAppUpdates: vi.fn(),
-  checkAppReleaseNotes: vi.fn(),
-}));
-
 vi.mock('@/utils/ua', () => ({
   parseWebViewInfo: () => 'Chrome 148',
 }));
 
 vi.mock('@/utils/version', () => ({
   getAppVersion: () => '0.11.20',
+  READEST_BASE_VERSION: '0.12.1',
 }));
 
 vi.mock('@/utils/clipboard', () => ({
@@ -122,5 +114,11 @@ describe('AboutWindow version label', () => {
 
     expect(label.tagName).toBe('BUTTON');
     expect(label.getAttribute('title')).toBe('Copy');
+  });
+
+  it('shows the upstream Readest version the fork is based on', async () => {
+    await openDialog();
+
+    expect(screen.getByText('Based on Readest 0.12.1').tagName).toBe('P');
   });
 });

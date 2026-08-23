@@ -47,6 +47,7 @@ import GoogleDriveForm from './integrations/GoogleDriveForm';
 import OneDriveForm from './integrations/OneDriveForm';
 import ICloudForm from './integrations/ICloudForm';
 import S3Form from './integrations/S3Form';
+import ServerForm from './integrations/ServerForm';
 import { persistCloudProviderEnabled } from './integrations/cloudSync';
 import {
   canToggleCloudProvider,
@@ -724,6 +725,8 @@ const IntegrationsPanel: React.FC = () => {
           </div>
         )}
       </div>
+
+      {isTauriAppPlatform() && <ServerForm />}
 
       <div className='w-full' data-setting-id='settings.integrations.catalogs'>
         <SectionTitle className='mb-2'>{_('Content Sources')}</SectionTitle>

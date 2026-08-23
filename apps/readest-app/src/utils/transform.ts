@@ -156,7 +156,11 @@ export const transformBookFromDB = (dbBook: DBBook): Book => {
     coverHash: cover_hash ?? null,
     coverUpdatedAt: cover_updated_at ? new Date(cover_updated_at).getTime() : null,
     sourceTitle: source_title,
-    metadata: metadata ? JSON.parse(metadata) : null,
+    // The books.metadata column is Postgres `json`: rows written with the
+    // metadata stored as a JSON object come back from the REST API as a plain
+    // object, so only parse actual strings (JSON.parse on an object coerces
+    // it to "[object Object]" and throws).
+    metadata: metadata ? (typeof metadata === 'string' ? JSON.parse(metadata) : metadata) : null,
     metadataUpdatedAt: metadata_updated_at ? new Date(metadata_updated_at).getTime() : null,
     createdAt: new Date(created_at!).getTime(),
     updatedAt: new Date(updated_at!).getTime(),
