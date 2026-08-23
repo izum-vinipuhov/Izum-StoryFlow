@@ -27,6 +27,7 @@ Izum StoryFlow is an open-source ebook reader designed for immersive and deep re
 
 - 🎁 **Unlimited access** to all app features
 - 🧩 **Hybrid import** — the menu now lets you import books, audiobooks, or book + audiobook, download audiobooks from Yandex Books, and set up the Yandex API key
+- 🔌 **Client-server mode** — connect the app to your own sync server
 - 📚 **Bookshelves** — organize your books on custom shelves
 
 <p align="center">
@@ -77,6 +78,20 @@ Bookshelves for organizing your books. The menu entry (and how to turn it off) i
 
 <p align="center">
   <img src="./data/screenshots/menu_bookshelves.jpg" alt="Bookshelves in the menu" width="300" />
+</p>
+
+### Connecting the Client to the Server
+
+Open the sign-in screen and click **Configure server**:
+
+<p align="center">
+  <img src="./data/screenshots/sign_in.jpg" alt="Sign in" width="380" />
+</p>
+
+A window will open where you can enter your server address in the form `http://host:port` or `https://host:port`:
+
+<p align="center">
+  <img src="./data/screenshots/configure_server.jpg" alt="Configure server" width="620" />
 </p>
 
 <p align="center">
