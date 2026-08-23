@@ -8,6 +8,7 @@ import { useAppRouter } from '@/hooks/useAppRouter';
 import { eventDispatcher } from '@/utils/event';
 import { navigateToReader, showReaderWindow } from '@/utils/nav';
 import { getActiveFileSyncBackends } from '@/services/sync/cloudSyncProvider';
+import { isAudiobookFullyDownloaded } from '@/utils/audiobook';
 
 /**
  * Whether a third-party file mirror (WebDAV / Google Drive / S3 / OneDrive) is
@@ -54,12 +55,27 @@ export const useOpenBook = ({ setLoading, handleBookDownload }: UseOpenBookOptio
       // be moved or deleted behind our back. Probe, and re-fetch from the cloud
       // when it's really gone, instead of opening a reader that cannot load.
       if (await appService?.isBookAvailable(book)) {
-        if (!book.downloadedAt || !book.coverDownloadedAt) {
+        // For an audiobook "available" only means the chapter manifest is
+        // here — the chapters themselves may still be streaming. Stamping it
+        // downloaded would hide the library's Download button for a book that
+        // is not on the device.
+        const fullyDownloaded =
+          book.format !== 'AUDIOBOOK' ||
+          !appService ||
+          (await isAudiobookFullyDownloaded(appService, book));
+        if (fullyDownloaded && (!book.downloadedAt || !book.coverDownloadedAt)) {
           book.downloadedAt = Date.now();
           book.coverDownloadedAt = Date.now();
           await updateBook(envConfig, book);
         }
         return true;
+      }
+      // A cloud audiobook opens on its manifest alone; the reader streams the
+      // chapters on demand. The library's Download action still pulls the
+      // whole thing when the user wants it offline.
+      if (book.format === 'AUDIOBOOK' && book.uploadedAt && !hasFileSyncMirror()) {
+        const manifest = await appService?.downloadAudiobookManifest(book).catch(() => null);
+        if (manifest) return true;
       }
       let available = false;
       const loadingTimeout = setTimeout(() => setLoading(true), 200);

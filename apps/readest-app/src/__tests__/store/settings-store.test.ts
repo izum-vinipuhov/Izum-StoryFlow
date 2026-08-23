@@ -3,6 +3,7 @@ import { describe, test, expect, beforeEach, vi } from 'vitest';
 vi.mock('@/i18n/i18n', () => ({
   default: {
     changeLanguage: vi.fn(),
+    language: undefined as string | undefined,
   },
 }));
 
@@ -24,6 +25,12 @@ import type { SystemSettings } from '@/types/settings';
 const mockChangeLanguage = vi.mocked(i18n.changeLanguage);
 const mockInitDayjs = vi.mocked(initDayjs);
 const mockBroadcastGlobalSettings = vi.mocked(broadcastGlobalSettings);
+
+// The real i18next type declares `language: string`, but the mock may hold
+// `undefined` before init resolves the detected language.
+const setDetectedLanguage = (language: string | undefined) => {
+  (i18n as unknown as { language: string | undefined }).language = language;
+};
 
 function makeSettings(overrides: Partial<SystemSettings> = {}): SystemSettings {
   return {
@@ -171,6 +178,12 @@ describe('settingsStore', () => {
   });
 
   describe('applyUILanguage', () => {
+    beforeEach(() => {
+      setDetectedLanguage(undefined);
+      mockChangeLanguage.mockClear();
+      mockInitDayjs.mockClear();
+    });
+
     test('applies specified language', () => {
       useSettingsStore.getState().applyUILanguage('fr');
 
@@ -178,20 +191,32 @@ describe('settingsStore', () => {
       expect(mockInitDayjs).toHaveBeenCalledWith('fr');
     });
 
-    test('falls back to navigator.language when no language provided', () => {
-      const expectedLocale = navigator.language;
+    test('keeps the already-detected language when no language is provided', () => {
+      // The i18next detector may have resolved a language from localStorage
+      // before the boot applies the saved settings — that choice must not be
+      // overridden by navigator.language (the two raced on hard reloads and
+      // the UI language flipped between reloads).
+      setDetectedLanguage('ru');
       useSettingsStore.getState().applyUILanguage();
 
-      expect(mockChangeLanguage).toHaveBeenCalledWith(expectedLocale);
-      expect(mockInitDayjs).toHaveBeenCalledWith(expectedLocale);
+      expect(mockChangeLanguage).toHaveBeenCalledWith('ru');
+      expect(mockInitDayjs).toHaveBeenCalledWith('ru');
     });
 
-    test('falls back to navigator.language when undefined is passed', () => {
+    test('falls back to navigator.language when nothing is detected yet', () => {
       const expectedLocale = navigator.language;
       useSettingsStore.getState().applyUILanguage(undefined);
 
       expect(mockChangeLanguage).toHaveBeenCalledWith(expectedLocale);
       expect(mockInitDayjs).toHaveBeenCalledWith(expectedLocale);
+    });
+
+    test('empty string keeps the already-detected language', () => {
+      setDetectedLanguage('ru');
+      useSettingsStore.getState().applyUILanguage('');
+
+      expect(mockChangeLanguage).toHaveBeenCalledWith('ru');
+      expect(mockInitDayjs).toHaveBeenCalledWith('ru');
     });
 
     test('applies empty string language by falling back to navigator.language', () => {

@@ -31,11 +31,15 @@ vi.mock('@/libs/mediaSession', () => ({
   getMediaSession: () => null,
 }));
 
+const getDownloadUrlMock = vi.hoisted(() => vi.fn());
+vi.mock('@/libs/storage', () => ({ getDownloadUrl: getDownloadUrlMock }));
+
 import AudiobookViewer from '@/app/reader/components/AudiobookViewer';
 import { useBookDataStore } from '@/store/bookDataStore';
 import { useLibraryStore } from '@/store/libraryStore';
 
 const appService = {
+  exists: vi.fn(async () => true),
   readFile: vi.fn(async () => new TextEncoder().encode('audio-data').buffer),
   saveBookConfig: vi.fn(async (_book: object, _config: object, _settings?: object) => {}),
   saveLibraryBooks: vi.fn(async () => {}),
@@ -76,12 +80,16 @@ const book = {
   updatedAt: 0,
 };
 
-const seedBookData = (audioPosition?: { chapterIndex: number; positionSec: number }) => {
+const seedBookData = (
+  audioPosition?: { chapterIndex: number; positionSec: number },
+  bookOverrides: Record<string, unknown> = {},
+) => {
+  const seededBook = { ...book, ...bookOverrides };
   useBookDataStore.setState({
     booksData: {
       hash1: {
         id: 'hash1',
-        book,
+        book: seededBook,
         file: null,
         config: {
           schemaVersion: 3,
@@ -96,7 +104,7 @@ const seedBookData = (audioPosition?: { chapterIndex: number; positionSec: numbe
     },
   });
   useLibraryStore.setState({
-    library: [book],
+    library: [seededBook],
     hashIndex: new Map([['hash1', 0]]),
   });
 };
@@ -115,8 +123,12 @@ beforeEach(() => {
   syncH.syncState.syncedConfigs = null;
   syncH.syncState.syncConfigs.mockClear();
   appService.readFile.mockClear();
+  appService.exists.mockClear();
+  appService.exists.mockResolvedValue(true);
   appService.saveBookConfig.mockClear();
   appService.writeFile.mockClear();
+  getDownloadUrlMock.mockReset();
+  getDownloadUrlMock.mockResolvedValue('https://s3/chapter_001.m4a?sig=1');
 });
 
 afterEach(() => {
@@ -127,6 +139,18 @@ afterEach(() => {
 });
 
 describe('AudiobookViewer', () => {
+  it('streams the saved chapter when the audiobook is not on this device', async () => {
+    seedBookData({ chapterIndex: 1, positionSec: 42 }, { uploadedAt: 2000, downloadedAt: null });
+    appService.exists.mockResolvedValue(false);
+    renderViewer();
+
+    await waitFor(() => expect(getDownloadUrlMock).toHaveBeenCalled());
+    expect(getAudio().src).toBe('https://s3/chapter_001.m4a?sig=1');
+    expect(appService.readFile).not.toHaveBeenCalled();
+    // An https source is not a blob URL — nothing to revoke.
+    expect(URL.revokeObjectURL).not.toHaveBeenCalled();
+  });
+
   it('loads the saved chapter and restores its position', async () => {
     seedBookData({ chapterIndex: 1, positionSec: 42 });
     renderViewer();

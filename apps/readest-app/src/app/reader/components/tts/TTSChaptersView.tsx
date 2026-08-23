@@ -11,6 +11,8 @@ import type { AudiobookChapter } from '@/types/audiobook';
 export interface AudiobookSectionData {
   chapters: AudiobookChapter[];
   activeIndex: number | null;
+  /** Chapters missing from this device still play, straight from the cloud. */
+  canStream: boolean;
   isChapterLocal: (index: number) => boolean;
   isChapterDownloading: (index: number) => boolean;
   onPlay: (index: number) => void;
@@ -36,6 +38,7 @@ const AudiobookSection: React.FC<{
   const {
     chapters,
     activeIndex,
+    canStream,
     isChapterLocal,
     isChapterDownloading,
     onPlay,
@@ -81,7 +84,7 @@ const AudiobookSection: React.FC<{
               <button
                 type='button'
                 aria-label={_('Play')}
-                disabled={!isLocal}
+                disabled={!isLocal && !canStream}
                 onClick={() => onPlay(index)}
                 className='btn btn-circle btn-ghost btn-xs shrink-0 disabled:opacity-40'
               >
@@ -105,7 +108,11 @@ const AudiobookSection: React.FC<{
                   </span>
                 </div>
                 <span className='text-base-content/60 line-clamp-1 text-xs tabular-nums'>
-                  {isLocal ? formatPlaybackTime(chapter.durationSec) : _('Not downloaded')}
+                  {isLocal
+                    ? formatPlaybackTime(chapter.durationSec)
+                    : canStream
+                      ? _('Streaming')
+                      : _('Not downloaded')}
                 </span>
               </div>
               {!isLocal && (

@@ -16,7 +16,15 @@ import { useTranslation } from '@/hooks/useTranslation';
 import { useBookDataStore } from '@/store/bookDataStore';
 import { useSettingsStore } from '@/store/settingsStore';
 import { getMediaSession } from '@/libs/mediaSession';
-import { AUDIO_MIME_TYPES } from '@/services/tts/mediaOverlay/MediaOverlayClient';
+import {
+  isAudiobookStreamable,
+  resolveAudiobookChapterSource,
+} from '@/services/tts/audiobook/chapterSource';
+import {
+  createAudiobookAudioTransport,
+  type AudiobookAudioTransport,
+} from '@/services/tts/audiobook/audioTransport';
+import { NativeAudiobookPlayer } from '@/services/tts/audiobook/NativeAudiobookPlayer';
 import { DEFAULT_BOOK_SEARCH_CONFIG } from '@/services/constants';
 import { isRemoteAudioPositionNewer } from '@/utils/audiobook';
 import { serializeConfig } from '@/utils/serializer';
@@ -60,7 +68,12 @@ const AudiobookViewer: React.FC<AudiobookViewerProps> = ({ bookKey }) => {
   const book = bookData?.book ?? null;
   const manifest = bookData?.audioManifest ?? null;
 
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioRef = useRef<AudiobookAudioTransport | null>(null);
+  /** True while the loaded source is a blob URL this component must revoke. */
+  const sourceIsObjectUrlRef = useRef(false);
+  // A chapter missing from this device still plays out of cloud storage, so a
+  // peer can pick up the synced position without downloading the audiobook.
+  const canStream = isAudiobookStreamable(book, settings, !!user);
   const [chapterIndex, setChapterIndex] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [positionSec, setPositionSec] = useState(0);
@@ -181,12 +194,15 @@ const AudiobookViewer: React.FC<AudiobookViewerProps> = ({ bookKey }) => {
         setError(null);
         // The manifest records each chapter's actual file (Yandex chapters
         // are m4a, hybrid imports preserve the picked audio extension), so
-        // read that path instead of recomputing an m4a name.
-        const data = (await appService.readFile(chapter.file, 'Books', 'binary')) as ArrayBuffer;
-        if (audio.src) URL.revokeObjectURL(audio.src);
-        const ext = chapter.file.split('.').pop()?.toLowerCase() ?? '';
-        const blob = new Blob([data], { type: AUDIO_MIME_TYPES[ext] ?? 'audio/mpeg' });
-        audio.src = URL.createObjectURL(blob);
+        // resolve that path instead of recomputing an m4a name. A chapter
+        // that was never downloaded here plays straight from the cloud.
+        const source = await resolveAudiobookChapterSource(appService, chapter, canStream);
+        if (!source) throw new Error('chapter unavailable');
+        if (sourceIsObjectUrlRef.current && audio.src.startsWith('blob:')) {
+          URL.revokeObjectURL(audio.src);
+        }
+        audio.src = source.url;
+        sourceIsObjectUrlRef.current = source.isObjectUrl;
         audio.preservesPitch = true;
         audio.playbackRate = rate;
         audio.currentTime = startSec;
@@ -205,7 +221,7 @@ const AudiobookViewer: React.FC<AudiobookViewerProps> = ({ bookKey }) => {
         setLoading(false);
       }
     },
-    [appService, id, rate, _],
+    [appService, id, rate, canStream, _],
   );
 
   const nextChapter = useCallback(async () => {
@@ -435,6 +451,22 @@ const AudiobookViewer: React.FC<AudiobookViewerProps> = ({ bookKey }) => {
     }
   }, [playing, chapterIndex, positionSec]);
 
+  // On iOS Tauri the audiobook plays through the native AVPlayer (the same
+  // one the TTS stack owns), because a plain media element is interrupted
+  // when the media bridge claims the app's non-mixable playback session.
+  // Everywhere else the JSX audio element above is the transport.
+  useEffect(() => {
+    const transport = createAudiobookAudioTransport();
+    if (transport instanceof NativeAudiobookPlayer) {
+      audioRef.current = transport;
+      return () => {
+        audioRef.current = null;
+        void transport.shutdown();
+      };
+    }
+    return undefined;
+  }, []);
+
   // Audio element event wiring.
   useEffect(() => {
     const audio = audioRef.current;
@@ -503,7 +535,9 @@ const AudiobookViewer: React.FC<AudiobookViewerProps> = ({ bookKey }) => {
       const audio = audioRef.current;
       if (audio) {
         audio.pause();
-        if (audio.src) URL.revokeObjectURL(audio.src);
+        if (sourceIsObjectUrlRef.current && audio.src.startsWith('blob:')) {
+          URL.revokeObjectURL(audio.src);
+        }
       }
     };
   }, [appService, book, id]);
@@ -530,7 +564,16 @@ const AudiobookViewer: React.FC<AudiobookViewerProps> = ({ bookKey }) => {
         {book.author && <p className='text-base-content/70 text-sm'>{book.author}</p>}
       </div>
       {/* biome-ignore lint/a11y/useMediaCaption: audiobook chapters have no caption track */}
-      <audio ref={audioRef} className='hidden' />
+      <audio
+        ref={(el) => {
+          // On iOS the transport is the native AVPlayer (set up below); the
+          // JSX element only exists for the web/desktop/Android path.
+          if (!(audioRef.current instanceof NativeAudiobookPlayer)) {
+            audioRef.current = el as HTMLAudioElement | null;
+          }
+        }}
+        className='hidden'
+      />
       <div className='w-full max-w-lg'>
         <div className='text-base-content/70 mb-1 flex items-center justify-between text-xs'>
           <span className='truncate'>{chapter?.title ?? ''}</span>

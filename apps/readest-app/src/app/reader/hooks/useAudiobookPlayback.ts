@@ -21,6 +21,7 @@ import {
   AudiobookChapterPlayer,
   type AudiobookPlaybackInfo,
 } from '@/services/tts/audiobook/AudiobookChapterPlayer';
+import { isAudiobookStreamable } from '@/services/tts/audiobook/chapterSource';
 import {
   getAttachedAudiobookDir,
   getAttachedAudiobookManifestFilename,
@@ -32,6 +33,8 @@ import { resolveResumeChapter } from './audiobookResume';
 export interface UseAudiobookPlaybackResult {
   /** The book has an audiobook attached (manifest is present locally). */
   available: boolean;
+  /** Chapters missing from this device can be played straight from the cloud. */
+  canStream: boolean;
   /** The audiobook session is the active player in the TTS UI. */
   isActive: boolean;
   isPlaying: boolean;
@@ -118,6 +121,7 @@ export function useAudiobookPlayback(bookKey: string): UseAudiobookPlaybackResul
     if (existing instanceof AudiobookChapterPlayer && !existing.terminated) {
       playerRef.current = existing;
       existing.attachBook(appService!, hash);
+      existing.streamable = canStream;
       setIsPlaying(existing.state === 'playing');
       setIsActive(existing.state !== 'stopped');
       setActiveIndex(existing.state !== 'stopped' ? existing.currentChapterIndex : null);
@@ -126,6 +130,7 @@ export function useAudiobookPlayback(bookKey: string): UseAudiobookPlaybackResul
     if (!appService) return null;
     const player = new AudiobookChapterPlayer();
     player.attachBook(appService, hash);
+    player.streamable = canStream;
     player.bindAudioEvents();
     player.addEventListener('tts-state-change', ((event: CustomEvent) => {
       const state = event.detail.state as string;
@@ -157,6 +162,14 @@ export function useAudiobookPlayback(bookKey: string): UseAudiobookPlaybackResul
   const { syncClient } = useSyncContext();
   const { user } = useAuth();
   const lastPushAtRef = useRef(0);
+
+  // A chapter that is not on this device still plays when the audiobook is in
+  // cloud storage — no download needed, so a peer can pick up the synced
+  // position immediately.
+  const canStream = isAudiobookStreamable(book, settings, !!user);
+  useEffect(() => {
+    if (playerRef.current) playerRef.current.streamable = canStream;
+  }, [canStream]);
 
   // Cloud push of the config (position rides viewSettings.audioPosition) —
   // useProgressSync only pushes on text-location changes, which audiobook
@@ -455,10 +468,11 @@ export function useAudiobookPlayback(bookKey: string): UseAudiobookPlaybackResul
         // predates the adoption).
         const config = useBookDataStore.getState().getConfig(bookKey);
         const saved = config?.viewSettings?.audioPosition ?? config?.audioPosition;
-        // Resume from the saved position; if that chapter isn't downloaded,
-        // fall back to the nearest downloaded one.
-        const isLocal = (i: number) => localFiles.has(manifest.chapters[i]?.file ?? '');
-        const index = resolveResumeChapter(saved?.chapterIndex, player.chapterCount, isLocal);
+        // Resume from the saved position. Streaming makes every chapter
+        // playable; without it, fall back to the nearest downloaded one.
+        const isPlayable = (i: number) =>
+          canStream || localFiles.has(manifest.chapters[i]?.file ?? '');
+        const index = resolveResumeChapter(saved?.chapterIndex, player.chapterCount, isPlayable);
         if (index === null) {
           // Open the player on the offline-audio view so the user can hit
           // the download button right away.
@@ -483,6 +497,7 @@ export function useAudiobookPlayback(bookKey: string): UseAudiobookPlaybackResul
       adoptRemotePosition,
       fetchRemotePosition,
       localFiles,
+      canStream,
     ],
   );
 
@@ -664,6 +679,7 @@ export function useAudiobookPlayback(bookKey: string): UseAudiobookPlaybackResul
 
   return {
     available,
+    canStream,
     isActive,
     isPlaying,
     chapters: manifest?.chapters ?? [],

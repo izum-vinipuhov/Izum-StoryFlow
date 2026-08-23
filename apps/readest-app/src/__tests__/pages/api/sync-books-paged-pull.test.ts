@@ -43,6 +43,12 @@ vi.mock('@/utils/supabase', () => ({
 vi.mock('@/utils/access', () => ({
   validateUserAndToken: async () => ({ user: { id: 'u1' }, token: 'tok' }),
 }));
+// The real flag drives mode selection; the mode sweep is exercised by its own
+// service test and must not touch the (unmocked) admin client here.
+vi.mock('@/services/sharedLibrary', async (orig) => ({
+  ...(await orig<typeof import('@/services/sharedLibrary')>()),
+  ensureSharedLibraryMode: vi.fn(async () => {}),
+}));
 
 import { GET } from '@/pages/api/sync';
 
@@ -55,6 +61,21 @@ const iso = (ms: number) => new Date(ms).toISOString();
 const row = (hash: string, syncedMs: number) => ({ book_hash: hash, synced_at: iso(syncedMs) });
 const hashes = (body: { books: { book_hash: string }[] }) => body.books.map((b) => b.book_hash);
 const findCalls = (chain: Call[], method: string) => chain.filter((c) => c.method === method);
+// A books row in the shared-library world: carries the owner and the shared
+// flag the server pull scope matches on.
+const sharedRow = (
+  hash: string,
+  syncedMs: number,
+  user: string,
+  shared: boolean,
+  deleted = false,
+) => ({
+  book_hash: hash,
+  synced_at: iso(syncedMs),
+  user_id: user,
+  shared,
+  deleted_at: deleted ? iso(syncedMs) : null,
+});
 
 beforeEach(() => {
   queries.length = 0;
@@ -113,5 +134,92 @@ describe('GET /api/sync?type=books&limit=N (paged pull)', () => {
     expect(findCalls(q!, 'order')[0]?.args).toEqual(['synced_at', { ascending: false }]);
     expect(findCalls(q!, 'range')[0]?.args).toEqual([0, 999]);
     expect(hashes(body)).toEqual(['a']);
+  });
+});
+
+describe('GET /api/sync?type=books — shared library mode (default ON)', () => {
+  it('scopes the pull to own rows OR live shared rows', async () => {
+    responses.push({ data: [sharedRow('a', 2000, 'u2', true)], error: null });
+
+    await GET(req('type=books&since=1000&limit=2'));
+
+    const [page] = queries;
+    expect(findCalls(page!, 'or')[0]?.args).toEqual([
+      'user_id.eq.u1,and(shared.is.true,deleted_at.is.null)',
+    ]);
+  });
+
+  it('returns another user’s shared row to the caller', async () => {
+    responses.push({ data: [sharedRow('a', 2000, 'u2', true)], error: null });
+
+    const res = await GET(req('type=books&since=1000&limit=2'));
+    const body = await res.json();
+
+    expect(hashes(body)).toEqual(['a']);
+  });
+
+  it('the caller’s own row always beats the shared row of the same hash (removal sticks)', async () => {
+    // A removed shared book: the caller pushed a tombstone (own row, deleted),
+    // the owner's shared row is still live. The own row must win.
+    responses.push({
+      data: [
+        sharedRow('h1', 2000, 'u2', true),
+        sharedRow('h1', 3000, 'u1', false, true), // own tombstone
+      ],
+      error: null,
+    });
+    responses.push({ data: [], error: null }); // second raw page: stream ends
+
+    const res = await GET(req('type=books&since=1000&limit=2'));
+    const body = await res.json();
+
+    expect(body.books).toHaveLength(1);
+    expect(body.books[0].user_id).toBe('u1');
+    expect(body.books[0].deleted_at).toBeTruthy();
+  });
+
+  it('keeps pulling raw windows when the dedupe shrinks a full page below the limit', async () => {
+    // Page 1 is full (2 rows) but dedupes to one unique hash; the loop must
+    // fetch the next window instead of returning a short page.
+    responses.push({
+      data: [sharedRow('h1', 2000, 'u2', true), sharedRow('h1', 3000, 'u1', false)],
+      error: null,
+    });
+    responses.push({ data: [sharedRow('h2', 4000, 'u2', true)], error: null });
+    responses.push({ data: [], error: null }); // tie-completion query
+
+    const res = await GET(req('type=books&since=1000&limit=2'));
+    const body = await res.json();
+
+    expect(queries.length).toBe(3);
+    const pages = queries.slice(0, 2);
+    expect(findCalls(pages[1]!, 'range')[0]?.args).toEqual([2, 3]);
+    expect(hashes(body)).toEqual(['h1', 'h2']);
+    expect(body.books[0].user_id).toBe('u1');
+  });
+
+  it('conjoins a per-book narrowing with both scope branches', async () => {
+    responses.push({ data: [], error: null });
+
+    await GET(req('type=books&since=1000&limit=2&book=h9&meta_hash=m9'));
+
+    const [page] = queries;
+    expect(findCalls(page!, 'or')[0]?.args).toEqual([
+      'or(and(user_id.eq.u1,or(book_hash.eq.h9,meta_hash.eq.m9)),' +
+        'and(shared.is.true,deleted_at.is.null,or(book_hash.eq.h9,meta_hash.eq.m9)))',
+    ]);
+  });
+
+  it('mode A (SHARED_LIBRARY=false) keeps the exact owner-only scope', async () => {
+    vi.stubEnv('SHARED_LIBRARY', 'false');
+    responses.push({ data: [sharedRow('a', 2000, 'u2', true)], error: null });
+
+    const res = await GET(req('type=books&since=1000&limit=2'));
+    const body = await res.json();
+
+    const [page] = queries;
+    expect(findCalls(page!, 'eq').map((c) => c.args)).toContainEqual(['user_id', 'u1']);
+    expect(findCalls(page!, 'or')).toHaveLength(0);
+    expect(hashes(body)).toEqual(['a']); // the mock applies no filters; the scope shape is the assertion
   });
 });

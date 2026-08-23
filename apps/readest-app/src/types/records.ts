@@ -21,6 +21,12 @@ export interface DBBook {
   updated_at?: string;
   deleted_at?: string | null;
   uploaded_at?: string | null;
+  /**
+   * Server-side shared-library flag: written only by the server (sync POST
+   * derives it from the caller's live files rows; the Yandex runner stamps it
+   * on its own rows). Never supplied by the client.
+   */
+  shared?: boolean;
 }
 
 export interface DBBookConfig {

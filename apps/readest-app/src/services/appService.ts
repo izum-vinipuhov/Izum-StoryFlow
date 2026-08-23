@@ -450,6 +450,10 @@ export abstract class BaseAppService implements AppService {
     );
   }
 
+  async downloadAudiobookManifest(book: Book): Promise<AudiobookManifest | null> {
+    return CloudSvc.downloadAudiobookManifest(this, this.fs, this.localBooksDir, book);
+  }
+
   async downloadAttachedAudiobookChapter(
     book: Book,
     chapterFile: string,

@@ -7,9 +7,11 @@ import type {
   YandexTrack,
   YandexTracksResponse,
 } from './types';
+import { getChapterUrl, getTrackDurationSec, YANDEX_API_BASE, YANDEX_TOKEN_ERROR } from './utils';
 
-export const YANDEX_API_BASE = 'https://api.bookmate.yandex.net/api/v5';
-export const YANDEX_TOKEN_ERROR = 'Yandex token invalid or expired';
+// Re-exported for call-site compatibility; the implementations live in the
+// pure utils module so the server-side runner can import them too.
+export { YANDEX_API_BASE, YANDEX_TOKEN_ERROR, getChapterUrl, getTrackDurationSec };
 
 export type YandexResourceType = 'book' | 'audiobook' | 'comicbook' | 'serial' | 'series';
 
@@ -134,29 +136,6 @@ export const fetchTracks = async (uuid: string, token: string): Promise<YandexTr
     token,
   )) as YandexTracksResponse;
   return data?.tracks ?? [];
-};
-
-/**
- * The API reports durations as `{seconds, offset, preview}` objects — never
- * let the raw shape leak into progress math (0 + {} concatenates into
- * "[object Object]" strings, corrupting Book.progress).
- */
-export const getTrackDurationSec = (track: YandexTrack): number => {
-  const duration = track.duration;
-  if (typeof duration === 'number' && Number.isFinite(duration)) return duration;
-  if (duration && typeof duration === 'object' && typeof duration.seconds === 'number') {
-    return duration.seconds;
-  }
-  return 0;
-};
-
-/**
- * The offline URL points at an HLS media playlist; swapping the extension
- * yields the direct fMP4 segment (plain, no DRM).
- */
-export const getChapterUrl = (track: YandexTrack): string | null => {
-  const url = track.offline?.max_bit_rate?.url;
-  return url ? url.replace('.m3u8', '.m4a') : null;
 };
 
 /**

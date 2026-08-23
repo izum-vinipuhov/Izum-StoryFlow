@@ -6,6 +6,14 @@ import Dialog from '@/components/Dialog';
 import { useTranslation } from '@/hooks/useTranslation';
 import { yandexDownloadsManager } from '@/services/yandex/yandexDownloadsManager';
 import { useYandexDownloadsStore, type YandexDownloadJob } from '@/store/yandexDownloadsStore';
+import { useYandexServerJobsStore } from '@/store/yandexServerJobsStore';
+import {
+  cancelServerJob,
+  dismissServerJob,
+  pauseServerJob,
+  resumeServerJob,
+  useYandexServerJobs,
+} from '@/hooks/useYandexServerJobs';
 import { formatBytes } from '@/utils/book';
 
 /**
@@ -24,10 +32,30 @@ export const setYandexDownloadsPanelVisible = (visible: boolean) => {
 
 const fmtBytes = (bytes: number) => (bytes ? formatBytes(bytes) : '0 B');
 
-const JobRow: React.FC<{ job: YandexDownloadJob }> = ({ job }) => {
+const JobRow: React.FC<{
+  job: YandexDownloadJob;
+  source: 'local' | 'server';
+}> = ({ job, source }) => {
   const _ = useTranslation();
   const iconSize = 18;
   const isActive = job.status === 'downloading' || job.status === 'paused';
+
+  const pause = () => {
+    if (source === 'server') void pauseServerJob(job.id);
+    else yandexDownloadsManager.pauseJob(job.id);
+  };
+  const resume = () => {
+    if (source === 'server') void resumeServerJob(job.id);
+    else yandexDownloadsManager.resumeJob(job.id);
+  };
+  const cancel = () => {
+    if (source === 'server') void cancelServerJob(job.id);
+    else void yandexDownloadsManager.cancelJob(job.id);
+  };
+  const dismiss = () => {
+    if (source === 'server') void dismissServerJob(job.id);
+    else useYandexDownloadsStore.getState().removeJob(job.id);
+  };
 
   const statusLabel = () => {
     switch (job.status) {
@@ -70,7 +98,7 @@ const JobRow: React.FC<{ job: YandexDownloadJob }> = ({ job }) => {
       <div className='flex items-center gap-1'>
         {job.status === 'downloading' && (
           <button
-            onClick={() => yandexDownloadsManager.pauseJob(job.id)}
+            onClick={pause}
             className='btn btn-ghost btn-sm btn-circle'
             aria-label={_('Pause')}
           >
@@ -79,7 +107,7 @@ const JobRow: React.FC<{ job: YandexDownloadJob }> = ({ job }) => {
         )}
         {job.status === 'paused' && (
           <button
-            onClick={() => yandexDownloadsManager.resumeJob(job.id)}
+            onClick={resume}
             className='btn btn-ghost btn-sm btn-circle'
             aria-label={_('Resume')}
           >
@@ -88,7 +116,7 @@ const JobRow: React.FC<{ job: YandexDownloadJob }> = ({ job }) => {
         )}
         {job.status === 'failed' && (
           <button
-            onClick={() => yandexDownloadsManager.resumeJob(job.id)}
+            onClick={resume}
             className='btn btn-ghost btn-sm btn-circle'
             aria-label={_('Retry')}
           >
@@ -97,7 +125,7 @@ const JobRow: React.FC<{ job: YandexDownloadJob }> = ({ job }) => {
         )}
         {isActive && (
           <button
-            onClick={() => void yandexDownloadsManager.cancelJob(job.id)}
+            onClick={cancel}
             className='btn btn-ghost btn-sm btn-circle'
             aria-label={_('Cancel')}
           >
@@ -106,7 +134,7 @@ const JobRow: React.FC<{ job: YandexDownloadJob }> = ({ job }) => {
         )}
         {(job.status === 'completed' || job.status === 'failed') && (
           <button
-            onClick={() => useYandexDownloadsStore.getState().removeJob(job.id)}
+            onClick={dismiss}
             className='btn btn-ghost btn-sm btn-circle'
             aria-label={_('Dismiss')}
           >
@@ -119,13 +147,17 @@ const JobRow: React.FC<{ job: YandexDownloadJob }> = ({ job }) => {
 };
 
 /**
- * Table of Yandex downloads (session-only): active jobs with pause/cancel
- * controls, completed and failed rows below.
+ * Table of Yandex downloads: session-local jobs (with pause/cancel controls)
+ * plus server-side jobs polled from /api/yandex/jobs — those survive page
+ * refreshes and app restarts. The panel hosts the polling hook for the whole
+ * library page.
  */
 const YandexDownloadsPanel: React.FC = () => {
   const _ = useTranslation();
   const jobs = useYandexDownloadsStore((state) => state.jobs);
+  const serverJobs = useYandexServerJobsStore((state) => state.serverJobs);
   const [isOpen, setIsOpen] = useState(false);
+  useYandexServerJobs();
 
   useEffect(() => {
     const handleCustomEvent = (event: CustomEvent) => {
@@ -144,8 +176,18 @@ const YandexDownloadsPanel: React.FC = () => {
     };
   }, []);
 
+  // A server job is listed only when no local session row claims the id.
+  const localIds = new Set(jobs.map((job) => job.id));
   const activeJobs = jobs.filter((job) => job.status === 'downloading' || job.status === 'paused');
   const inactiveJobs = jobs.filter((job) => job.status === 'completed' || job.status === 'failed');
+  const serverRows = serverJobs.filter((job) => !localIds.has(job.id));
+  const serverActive = serverRows.filter(
+    (job) => job.status === 'downloading' || job.status === 'paused',
+  );
+  const serverInactive = serverRows.filter(
+    (job) => job.status === 'completed' || job.status === 'failed',
+  );
+  const hasAny = jobs.length > 0 || serverActive.length > 0 || serverInactive.length > 0;
 
   return (
     <Dialog
@@ -156,17 +198,23 @@ const YandexDownloadsPanel: React.FC = () => {
       boxClassName='sm:!w-[520px] sm:!max-w-[520px] sm:!h-auto sm:!max-h-[80vh]'
     >
       <div className='flex flex-col gap-2 px-4 pb-6 pt-2'>
-        {jobs.length === 0 && (
+        {!hasAny && (
           <p className='text-base-content/60 py-6 text-center text-sm'>{_('No downloads')}</p>
         )}
         {activeJobs.map((job) => (
-          <JobRow key={job.id} job={job} />
+          <JobRow key={`local-${job.id}`} job={job} source='local' />
         ))}
-        {activeJobs.length > 0 && inactiveJobs.length > 0 && (
+        {serverActive.map((job) => (
+          <JobRow key={`server-${job.id}`} job={job} source='server' />
+        ))}
+        {hasAny && (serverInactive.length > 0 || inactiveJobs.length > 0) && (
           <hr aria-hidden='true' className='border-base-200 my-1' />
         )}
         {inactiveJobs.map((job) => (
-          <JobRow key={job.id} job={job} />
+          <JobRow key={`local-${job.id}`} job={job} source='local' />
+        ))}
+        {serverInactive.map((job) => (
+          <JobRow key={`server-${job.id}`} job={job} source='server' />
         ))}
       </div>
     </Dialog>

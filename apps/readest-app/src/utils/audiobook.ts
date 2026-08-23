@@ -1,6 +1,7 @@
 import { md5 } from 'js-md5';
 import type { Book } from '@/types/book';
 import type { AudiobookPosition } from '@/types/audiobook';
+import type { AppService } from '@/types/system';
 
 /** Drift between two saves of "the same moment" that is not worth syncing. */
 export const AUDIO_POSITION_SYNC_TOLERANCE_SEC = 5;
@@ -59,6 +60,24 @@ export const getAttachedAudiobookChapterPath = (hash: string, index: number): st
 export const getAudiobookManifestHash = (
   chapters: { title: string; durationSec: number }[],
 ): string => md5(JSON.stringify(chapters));
+
+/**
+ * A standalone audiobook counts as downloaded only when every chapter file is
+ * on the device. The manifest alone is enough to open one and stream it, so
+ * manifest presence (what `isBookAvailable` checks) must not be mistaken for a
+ * full download — that would hide the library's Download button.
+ */
+export const isAudiobookFullyDownloaded = async (
+  appService: AppService,
+  book: Book,
+): Promise<boolean> => {
+  const manifest = await appService.loadAudiobookManifest(book).catch(() => null);
+  if (!manifest || manifest.chapters.length === 0) return false;
+  for (const chapter of manifest.chapters) {
+    if (!(await appService.exists(chapter.file, 'Books'))) return false;
+  }
+  return true;
+};
 
 export const getAudiobookTotalSec = (chapters: { durationSec: number }[]): number =>
   chapters.reduce(

@@ -17,8 +17,40 @@ import {
 } from '@/libs/sync';
 import { validateUserAndToken } from '@/utils/access';
 import { DBBook, DBBookConfig } from '@/types/records';
+import { ensureSharedLibraryMode, isSharedLibraryEnabled } from '@/services/sharedLibrary';
 
 const pageKey = (r: StatPageRecord) => `${r.book_hash}|${r.page}|${r.start_time}`;
+
+/**
+ * The books pull scope in shared-library mode: the caller's own rows (any
+ * state, tombstones included — deletes must flow) OR live shared rows of any
+ * user. `bookFilter` (an optional per-hash/per-meta-hash narrowing) is
+ * conjoined with BOTH branches so a per-book pull can never leak another
+ * user's non-shared row.
+ */
+const buildSharedBooksScope = (userId: string, bookFilter: string | null): string => {
+  const own = `user_id.eq.${userId}`;
+  if (!bookFilter) return `${own},and(shared.is.true,deleted_at.is.null)`;
+  return `or(and(${own},${bookFilter}),and(shared.is.true,deleted_at.is.null,${bookFilter}))`;
+};
+
+/**
+ * One row per book_hash; the caller's own row always beats a shared row of
+ * the same hash (a peer's tombstone for a removed shared book then sticks and
+ * the book never resurrects).
+ */
+const dedupeBooksOwnFirst = (records: SyncRecord[], userId: string): SyncRecord[] => {
+  const byHash = new Map<string, SyncRecord>();
+  for (const rec of records) {
+    const hash = rec.book_hash;
+    if (!hash) continue;
+    const existing = byHash.get(hash);
+    if (!existing || (existing.user_id !== userId && rec.user_id === userId)) {
+      byHash.set(hash, rec);
+    }
+  }
+  return [...byHash.values()];
+};
 
 /**
  * Decide which incoming page events to write: new keys always win; existing
@@ -231,6 +263,9 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Not authenticated' }, { status: 403 });
   }
   const supabase = createSupabaseClient(token);
+  // Keep books.shared in line with the current mode before serving a pull
+  // (no-op after the first request per mode; also covers mode flips).
+  await ensureSharedLibraryMode();
 
   const { searchParams } = new URL(req.url);
   const sinceParam = searchParams.get('since');
@@ -252,6 +287,7 @@ export async function GET(req: NextRequest) {
   }
 
   const sinceIso = since.toISOString();
+  const sharedLibraryEnabled = isSharedLibraryEnabled();
 
   try {
     const results: SyncResult = { books: [], configs: [], notes: [], statBooks: [], statPages: [] };
@@ -278,15 +314,30 @@ export async function GET(req: NextRequest) {
         let query = supabase
           .from(table)
           .select('*')
-          .eq('user_id', user.id)
           .range(offset, offset + PAGE_SIZE - 1);
 
-        if (bookParam && metaHashParam) {
-          query = query.or(`book_hash.eq.${bookParam},meta_hash.eq.${metaHashParam}`);
-        } else if (bookParam) {
-          query = query.eq('book_hash', bookParam);
-        } else if (metaHashParam) {
-          query = query.eq('meta_hash', metaHashParam);
+        if (table === 'books' && sharedLibraryEnabled) {
+          // Shared mode: own rows OR live shared rows (see
+          // buildSharedBooksScope — the per-book narrowing is conjoined with
+          // both branches so foreign non-shared rows can never leak).
+          const filter =
+            bookParam && metaHashParam
+              ? `or(book_hash.eq.${bookParam},meta_hash.eq.${metaHashParam})`
+              : bookParam
+                ? `book_hash.eq.${bookParam}`
+                : metaHashParam
+                  ? `meta_hash.eq.${metaHashParam}`
+                  : null;
+          query = query.or(buildSharedBooksScope(user.id, filter));
+        } else {
+          query = query.eq('user_id', user.id);
+          if (bookParam && metaHashParam) {
+            query = query.or(`book_hash.eq.${bookParam},meta_hash.eq.${metaHashParam}`);
+          } else if (bookParam) {
+            query = query.eq('book_hash', bookParam);
+          } else if (metaHashParam) {
+            query = query.eq('meta_hash', metaHashParam);
+          }
         }
 
         if (cursorColumn === 'synced_at') {
@@ -311,6 +362,11 @@ export async function GET(req: NextRequest) {
       }
 
       let records = allRecords;
+      if (table === 'books' && sharedLibraryEnabled) {
+        // A shared row and the caller's own row may coexist for the same hash;
+        // the own row (tombstone included) always wins.
+        records = dedupeBooksOwnFirst(records, user.id);
+      }
       if (dedupeKeys && dedupeKeys.length > 0) {
         const seen = new Set<string>();
         records = records.filter((rec) => {
@@ -338,42 +394,72 @@ export async function GET(req: NextRequest) {
     // the rest of a batch split by the page boundary. A page shorter than
     // `limit` tells the client the delta is exhausted.
     const fetchPagedBooks = async () => {
-      const bookFilters = <T extends { or: (f: string) => T; eq: (c: string, v: string) => T }>(
-        q: T,
-      ): T => {
-        if (bookParam && metaHashParam) {
-          return q.or(`book_hash.eq.${bookParam},meta_hash.eq.${metaHashParam}`);
-        } else if (bookParam) {
-          return q.eq('book_hash', bookParam);
-        } else if (metaHashParam) {
-          return q.eq('meta_hash', metaHashParam);
-        }
-        return q;
-      };
-      const { data, error } = await bookFilters(
-        supabase
+      // Scope + optional per-book narrowing, combined into ONE or-string in
+      // shared mode (supabase-js keeps a single `or` param, so the scope and
+      // the book filter cannot be issued as two separate .or() calls).
+      const scopedQuery = (offset: number, extra?: { eq: [string, string]; range?: boolean }) => {
+        let query = supabase
           .from('books')
           .select('*')
-          .eq('user_id', user.id)
           .gt('synced_at', sinceIso)
-          .order('synced_at', { ascending: true })
-          .range(0, limit - 1),
-      );
-      if (error) throw { table: 'books', error } as DBError;
-      const rows = (data ?? []) as SyncRecord[];
-      if (rows.length === limit) {
-        const lastSynced = (rows[rows.length - 1] as unknown as { synced_at: string }).synced_at;
-        const { data: extra, error: extraError } = await bookFilters(
-          supabase.from('books').select('*').eq('user_id', user.id).eq('synced_at', lastSynced),
-        );
-        if (extraError) throw { table: 'books', error: extraError } as DBError;
-        const seen = new Set(rows.map((r) => r.book_hash));
-        for (const r of (extra ?? []) as SyncRecord[]) {
-          if (!seen.has(r.book_hash)) {
-            seen.add(r.book_hash);
-            rows.push(r);
+          .order('synced_at', {
+            ascending: true,
+          });
+        // The tie-completion query spans every row sharing the boundary
+        // timestamp — no range.
+        if (extra?.range !== false) query = query.range(offset, offset + limit - 1);
+        if (sharedLibraryEnabled) {
+          const filter =
+            bookParam && metaHashParam
+              ? `or(book_hash.eq.${bookParam},meta_hash.eq.${metaHashParam})`
+              : bookParam
+                ? `book_hash.eq.${bookParam}`
+                : metaHashParam
+                  ? `meta_hash.eq.${metaHashParam}`
+                  : null;
+          query = query.or(buildSharedBooksScope(user.id, filter));
+        } else {
+          query = query.eq('user_id', user.id);
+          if (bookParam && metaHashParam) {
+            query = query.or(`book_hash.eq.${bookParam},meta_hash.eq.${metaHashParam}`);
+          } else if (bookParam) {
+            query = query.eq('book_hash', bookParam);
+          } else if (metaHashParam) {
+            query = query.eq('meta_hash', metaHashParam);
           }
         }
+        if (extra?.eq) query = query.eq(extra.eq[0], extra.eq[1]);
+        return query;
+      };
+
+      // Shared-mode dedupe can shrink a raw page below `limit` (an own row
+      // replaces its shared twin), and the client treats a short page as the
+      // end of the delta — so keep pulling raw windows until the deduped set
+      // reaches `limit` or the raw stream runs out.
+      const collected: SyncRecord[] = [];
+      for (let offset = 0; ; offset += limit) {
+        const { data, error } = await scopedQuery(offset);
+        if (error) throw { table: 'books', error } as DBError;
+        const raw = (data ?? []) as SyncRecord[];
+        collected.push(...raw);
+        if (raw.length < limit) break;
+        if (dedupeBooksOwnFirst(collected, user.id).length >= limit) break;
+      }
+      const rows = dedupeBooksOwnFirst(collected, user.id);
+      if (rows.length >= limit) {
+        const lastSynced = (rows[limit - 1] as unknown as { synced_at: string }).synced_at;
+        const { data: extra, error: extraError } = await scopedQuery(0, {
+          eq: ['synced_at', lastSynced],
+          range: false,
+        });
+        if (extraError) throw { table: 'books', error: extraError } as DBError;
+        // Re-dedupe over the union: a tie row can hold the caller's own row
+        // for a hash the main stream only carried as a shared row — the own
+        // row must win here too (otherwise a tombstone could be lost).
+        rows.push(...((extra ?? []) as SyncRecord[]));
+        const union = dedupeBooksOwnFirst(rows, user.id);
+        rows.length = 0;
+        rows.push(...union);
       }
       results.books = rows;
     };
@@ -539,6 +625,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Not authenticated' }, { status: 403 });
   }
   const supabase = createSupabaseClient(token);
+  await ensureSharedLibraryMode();
   const body = await req.json();
   const { books = [], configs = [], notes = [], statBooks = [], statPages = [] } = body as SyncData;
 
@@ -563,6 +650,24 @@ export async function POST(req: NextRequest) {
         rec.book_hash = dbRec.book_hash;
         return { original: rec, db: dbRec };
       });
+
+      // Shared-library mode: `shared` is never client-supplied — it is
+      // recomputed from the caller's own live files rows, so an adopter of a
+      // shared row (no files) can never re-share a phantom, while the actual
+      // uploader's pushes keep the row shared. The user-token client means
+      // files_select RLS additionally scopes this to the caller.
+      let sharedHashes = new Set<string>();
+      if (table === 'books' && isSharedLibraryEnabled()) {
+        const hashes = dbRecords.map(({ original }) => original.book_hash);
+        const { data: filesRows } = await supabase
+          .from('files')
+          .select('book_hash')
+          .eq('user_id', user.id)
+          .in('book_hash', hashes)
+          .is('deleted_at', null);
+        sharedHashes = new Set((filesRows ?? []).map((f) => f.book_hash as string));
+      }
+      const sharedFor = (hash: string | undefined): boolean => !!hash && sharedHashes.has(hash);
 
       // Build match conditions for batch
       const matchConditions = dbRecords.map(({ original }) => {
@@ -608,6 +713,7 @@ export async function POST(req: NextRequest) {
 
         if (!serverData) {
           dbRec.updated_at = new Date().toISOString();
+          if (table === 'books') (dbRec as DBBook).shared = sharedFor(original.book_hash);
           toInsert.push(dbRec);
         } else {
           const clientUpdatedAt = dbRec.updated_at ? new Date(dbRec.updated_at).getTime() : 0;
@@ -658,6 +764,7 @@ export async function POST(req: NextRequest) {
               clientBook.tags = meta.tags;
               clientBook.metadata = meta.metadata;
               clientBook.metadata_updated_at = meta.metadata_updated_at;
+              clientBook.shared = sharedFor(original.book_hash);
               toUpdate.push(clientBook);
             } else {
               // Only rewrite when a resolved field VALUE differs from the
@@ -690,6 +797,7 @@ export async function POST(req: NextRequest) {
                 propagated.tags = meta.tags;
                 propagated.metadata = meta.metadata;
                 propagated.metadata_updated_at = meta.metadata_updated_at;
+                propagated.shared = sharedFor(original.book_hash);
                 toUpdate.push(propagated);
               } else {
                 batchAuthoritativeRecords.push(serverData);

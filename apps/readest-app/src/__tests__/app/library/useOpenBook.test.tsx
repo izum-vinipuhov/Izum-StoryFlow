@@ -25,6 +25,8 @@ const routing = vi.hoisted(() => ({
 
 const isBookAvailable = vi.hoisted(() => vi.fn(async () => false));
 const navigateToReader = vi.hoisted(() => vi.fn());
+const downloadAudiobookManifest = vi.hoisted(() => vi.fn(async () => null as unknown));
+const isAudiobookFullyDownloaded = vi.hoisted(() => vi.fn(async () => false));
 
 vi.mock('@/hooks/useTranslation', () => ({
   useTranslation: () => (text: string) => text,
@@ -43,8 +45,14 @@ vi.mock('@/services/sync/cloudSyncProvider', () => ({
   getActiveFileSyncBackends: () => routing.backends,
 }));
 
+vi.mock('@/utils/audiobook', async (orig) => {
+  const actual = await orig<typeof import('@/utils/audiobook')>();
+  return { ...actual, isAudiobookFullyDownloaded };
+});
+
 const appService = {
   isBookAvailable,
+  downloadAudiobookManifest,
   hasWindow: false,
   saveLibraryBooks: vi.fn(async () => {}),
 } as unknown as AppService;
@@ -88,7 +96,63 @@ beforeEach(() => {
   vi.clearAllMocks();
   routing.backends = [];
   isBookAvailable.mockResolvedValue(false);
+  downloadAudiobookManifest.mockResolvedValue(null);
+  isAudiobookFullyDownloaded.mockResolvedValue(false);
   deleteIntents = [];
+});
+
+describe('useOpenBook — a cloud audiobook opens on its manifest and streams', () => {
+  const audiobook = () => makeBook({ format: 'AUDIOBOOK', uploadedAt: 2000, downloadedAt: null });
+
+  it('fetches only the manifest instead of pulling every chapter', async () => {
+    downloadAudiobookManifest.mockResolvedValue({ chapters: [{}] });
+    const { result, handleBookDownload } = setup();
+
+    await result.current.openBook(audiobook());
+    await flushNavigation();
+
+    expect(downloadAudiobookManifest).toHaveBeenCalledTimes(1);
+    expect(handleBookDownload).not.toHaveBeenCalled();
+    expect(navigateToReader).toHaveBeenCalled();
+  });
+
+  it('falls back to the full download when the manifest is not in the cloud', async () => {
+    downloadAudiobookManifest.mockResolvedValue(null);
+    const { result, handleBookDownload } = setup();
+
+    await result.current.openBook(audiobook());
+    await flushNavigation();
+
+    expect(handleBookDownload).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not mark a manifest-only audiobook as downloaded on reopen', async () => {
+    // Second open: the manifest is on disk, so isBookAvailable says yes — but
+    // the chapters are still streaming, so the library must keep offering the
+    // Download action.
+    isBookAvailable.mockResolvedValue(true);
+    isAudiobookFullyDownloaded.mockResolvedValue(false);
+    const book = audiobook();
+    const { result } = setup();
+
+    await result.current.openBook(book);
+    await flushNavigation();
+
+    expect(book.downloadedAt).toBeNull();
+    expect(navigateToReader).toHaveBeenCalled();
+  });
+
+  it('does stamp it once every chapter is on the device', async () => {
+    isBookAvailable.mockResolvedValue(true);
+    isAudiobookFullyDownloaded.mockResolvedValue(true);
+    const book = audiobook();
+    const { result } = setup();
+
+    await result.current.openBook(book);
+    await flushNavigation();
+
+    expect(book.downloadedAt).toBeTruthy();
+  });
 });
 
 describe('useOpenBook — a missing local file must not delete the cloud copy (#5265)', () => {

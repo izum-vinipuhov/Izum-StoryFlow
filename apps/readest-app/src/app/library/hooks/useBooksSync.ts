@@ -9,6 +9,7 @@ import { SYNC_BOOKS_INTERVAL_SEC } from '@/services/constants';
 import { throttle } from '@/utils/throttle';
 import { debounce } from '@/utils/debounce';
 import { eventDispatcher } from '@/utils/event';
+import { YANDEX_SERVER_BOOK_IMPORTED_EVENT } from '@/hooks/useYandexServerJobs';
 import { useSettingsStore } from '@/store/settingsStore';
 import {
   isReadestCloudEnabled,
@@ -170,6 +171,17 @@ export const useBooksSync = () => {
     if (!user || !useSyncInited || !libraryLoaded) return;
     pullLibrary();
   }, [user, useSyncInited, libraryLoaded, pullLibrary]);
+
+  // A server-side Yandex download finished: pull books so the new entry
+  // appears in the library without waiting for the next sync cycle. The
+  // event is dispatched by useYandexServerJobs, also mounted on this page.
+  useEffect(() => {
+    const onYandexImported = () => {
+      void syncBooks([], 'pull');
+    };
+    eventDispatcher.on(YANDEX_SERVER_BOOK_IMPORTED_EVENT, onYandexImported);
+    return () => eventDispatcher.off(YANDEX_SERVER_BOOK_IMPORTED_EVENT, onYandexImported);
+  }, [syncBooks]);
 
   const updateLibrary = useCallback(async () => {
     if (!syncedBooks?.length) return;

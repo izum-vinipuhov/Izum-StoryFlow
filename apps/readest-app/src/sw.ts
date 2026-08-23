@@ -85,8 +85,14 @@ const serwist = new Serwist({
     },
     // Other external resources
     {
-      matcher: ({ url }) => {
+      matcher: ({ url, request }) => {
         if (url.pathname.startsWith('/api/')) {
+          return false;
+        }
+        // Streamed audiobook chapters arrive as range/206 responses the cache
+        // API cannot store, and caching multi-hundred-MB bodies would churn
+        // the offline cache — let media requests bypass it entirely.
+        if (request.destination === 'audio' || request.destination === 'video') {
           return false;
         }
         return /^https?.*/.test(url.href);

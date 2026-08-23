@@ -1,5 +1,6 @@
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
 import { deleteBook, uploadBook } from '@/services/cloudService';
+import { deleteBookFilesFromCloud } from '@/libs/storage';
 import { Book, BookFormat } from '@/types/book';
 import { BaseDir, FileSystem } from '@/types/system';
 
@@ -15,6 +16,7 @@ vi.mock('@/libs/storage', () => ({
   downloadFile: vi.fn().mockResolvedValue(undefined),
   uploadFile: vi.fn().mockResolvedValue('https://example.com/file'),
   deleteFile: vi.fn(),
+  deleteBookFilesFromCloud: vi.fn().mockResolvedValue(undefined),
   createProgressHandler: vi.fn().mockReturnValue(vi.fn()),
   batchGetDownloadUrls: vi.fn().mockResolvedValue([]),
 }));
@@ -173,6 +175,85 @@ describe('cloudService', () => {
         await deleteBook(mockFs, book, 'both');
 
         expect(book.uploadedAt).toBeNull();
+      });
+    });
+
+    describe('server-downloaded books without local manifests', () => {
+      const deleteBookFilesFromCloudMock = vi.mocked(deleteBookFilesFromCloud);
+
+      beforeEach(() => {
+        deleteBookFilesFromCloudMock.mockClear();
+      });
+
+      test('delegates cloud cleanup for a Yandex audiobook this device never opened', async () => {
+        const book = createMockBook({
+          format: 'AUDIOBOOK' as BookFormat,
+          uploadedAt: 1000,
+          metadata: {
+            title: 'Test Book',
+            author: 'Author',
+            language: 'und',
+            yandex: { uuid: 'uuid1' },
+          },
+        });
+        // The default readFile mock returns 'content', which is not valid
+        // manifest JSON — the local manifest probe fails, as on a device
+        // that never downloaded the chapters.
+        await deleteBook(mockFs, book, 'cloud');
+
+        expect(deleteBookFilesFromCloudMock).toHaveBeenCalledWith('abc123');
+      });
+
+      test('delegates cleanup for a Yandex ebook with an attached audiobook', async () => {
+        const book = createMockBook({
+          uploadedAt: 1000,
+          metadata: {
+            title: 'Test Book',
+            author: 'Author',
+            language: 'und',
+            yandex: { uuid: 'uuid1', audiobookHash: 'audiohash' },
+          },
+        });
+        await deleteBook(mockFs, book, 'cloud');
+
+        expect(deleteBookFilesFromCloudMock).toHaveBeenCalledWith('abc123');
+      });
+
+      test('keeps the local enumeration for a plain book without Yandex metadata', async () => {
+        const book = createMockBook({ uploadedAt: 1000 });
+        await deleteBook(mockFs, book, 'cloud');
+
+        expect(deleteBookFilesFromCloudMock).not.toHaveBeenCalled();
+      });
+
+      test('keeps the local enumeration when the manifest exists', async () => {
+        vi.mocked(mockFs.readFile).mockImplementation(async (path: string) => {
+          if (path.endsWith('chapters.json')) {
+            return JSON.stringify({
+              schemaVersion: 1,
+              title: 't',
+              author: 'a',
+              totalDurationSec: 10,
+              chapters: [
+                { title: 'c', durationSec: 10, sizeBytes: 0, file: 'abc123/chapter_001.m4a' },
+              ],
+            });
+          }
+          return 'content';
+        });
+        const book = createMockBook({
+          format: 'AUDIOBOOK' as BookFormat,
+          uploadedAt: 1000,
+          metadata: {
+            title: 'Test Book',
+            author: 'Author',
+            language: 'und',
+            yandex: { uuid: 'uuid1' },
+          },
+        });
+        await deleteBook(mockFs, book, 'cloud');
+
+        expect(deleteBookFilesFromCloudMock).not.toHaveBeenCalled();
       });
     });
 

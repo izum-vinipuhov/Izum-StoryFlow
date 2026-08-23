@@ -8,6 +8,7 @@ const h = vi.hoisted(() => {
     currentChapterIndex = -1;
     state = 'stopped';
     terminated = false;
+    streamable = false;
     listeners = new Map<string, Set<(e: CustomEvent) => void>>();
     onPosition: ((p: { progress: number; total: number; transferSpeed: number }) => void) | null =
       null;
@@ -166,12 +167,16 @@ const book = {
   updatedAt: 0,
 };
 
-const seedBookData = (config: Record<string, unknown> = {}) => {
+const seedBookData = (
+  config: Record<string, unknown> = {},
+  bookOverrides: Record<string, unknown> = {},
+) => {
+  const seededBook = { ...book, ...bookOverrides };
   useBookDataStore.setState({
     booksData: {
       h1: {
         id: 'h1',
-        book,
+        book: seededBook,
         file: null,
         config: {
           schemaVersion: 3,
@@ -185,7 +190,7 @@ const seedBookData = (config: Record<string, unknown> = {}) => {
     },
   });
   useLibraryStore.setState({
-    library: [book],
+    library: [seededBook],
     hashIndex: new Map([['h1', 0]]),
   });
 };
@@ -198,6 +203,7 @@ beforeEach(() => {
   h.appService.readFile.mockClear();
   h.appService.saveBookConfig.mockClear();
   h.appService.exists.mockClear();
+  h.appService.exists.mockResolvedValue(true);
 });
 
 afterEach(() => {
@@ -283,6 +289,49 @@ describe('useAudiobookPlayback', () => {
     });
 
     expect(h.FakePlayer.instances[0]!.play).toHaveBeenCalledWith(1, 30);
+  });
+
+  it('resumes the saved chapter by streaming it when nothing is downloaded here', async () => {
+    // Device B: the book is in the library and the audiobook is in the cloud,
+    // but no chapter file was ever pulled down. Playback must continue from
+    // the synced position instead of asking for a download.
+    h.appService.exists.mockResolvedValue(false);
+    seedBookData(
+      {
+        audioPosition: { chapterIndex: 1, positionSec: 30 },
+        viewSettings: { audioPosition: { chapterIndex: 1, positionSec: 30 } },
+      },
+      { uploadedAt: 1 },
+    );
+    const { result } = renderHook(() => useAudiobookPlayback('h1-view1'));
+
+    await waitFor(() => expect(result.current.available).toBe(true));
+    await act(async () => {
+      await result.current.play();
+    });
+
+    expect(h.FakePlayer.instances[0]!.play).toHaveBeenCalledWith(1, 30);
+    expect(h.FakePlayer.instances[0]!.streamable).toBe(true);
+    // The chapter list still reports the truth about what is on the device.
+    expect(result.current.isChapterLocal(1)).toBe(false);
+    expect(result.current.canStream).toBe(true);
+  });
+
+  it('falls back to the download prompt when the audiobook is not in the cloud', async () => {
+    h.appService.exists.mockResolvedValue(false);
+    seedBookData({
+      audioPosition: { chapterIndex: 1, positionSec: 30 },
+      viewSettings: { audioPosition: { chapterIndex: 1, positionSec: 30 } },
+    });
+    const { result } = renderHook(() => useAudiobookPlayback('h1-view1'));
+
+    await waitFor(() => expect(result.current.available).toBe(true));
+    await act(async () => {
+      await result.current.play();
+    });
+
+    expect(h.FakePlayer.instances[0]!.play).not.toHaveBeenCalled();
+    expect(result.current.canStream).toBe(false);
   });
 
   it('play pulls a newer remote audioPosition from the cloud and resumes from it', async () => {

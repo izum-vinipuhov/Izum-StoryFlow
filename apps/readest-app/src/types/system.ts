@@ -199,6 +199,8 @@ export interface AppService {
     chapterFile: string,
     onProgress?: ProgressHandler,
   ): Promise<void>;
+  /** Manifest only, for opening a standalone audiobook that streams. */
+  downloadAudiobookManifest(book: Book): Promise<AudiobookManifest | null>;
   uploadFileToCloud(
     lfp: string,
     cfp: string,

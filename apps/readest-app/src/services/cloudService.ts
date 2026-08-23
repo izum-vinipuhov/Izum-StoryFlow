@@ -17,6 +17,7 @@ import {
   uploadFile,
   uploadReplicaFile,
   deleteFile as deleteCloudFile,
+  deleteBookFilesFromCloud,
   createProgressHandler,
   batchGetDownloadUrls,
 } from '@/libs/storage';
@@ -87,6 +88,10 @@ export async function deleteBook(
       if (manifest) {
         fps.push(getAudiobookManifestFilename(book));
         fps.push(...manifest.chapters.map((chapter) => chapter.file));
+      } else if (book.metadata?.yandex?.uuid) {
+        // A server-downloaded Yandex audiobook this device never opened has
+        // no local manifest to enumerate — let the server delete by hash.
+        await deleteBookFilesFromCloud(book.hash);
       }
     } else {
       fps.push(getRemoteBookFilename(book));
@@ -95,6 +100,9 @@ export async function deleteBook(
       if (attachedManifest) {
         fps.push(getAttachedAudiobookManifestFilename(book.hash));
         fps.push(...attachedManifest.chapters.map((chapter) => chapter.file));
+      } else if (book.metadata?.yandex?.audiobookHash) {
+        // Same gap for the attached audiobook of a server-downloaded ebook.
+        await deleteBookFilesFromCloud(book.hash);
       }
     }
     for (const fp of fps) {
@@ -541,6 +549,37 @@ async function downloadAudiobook(
     completedFiles.count++;
   }
   book.downloadedAt = Date.now();
+}
+
+/**
+ * Fetch only a standalone audiobook's chapter manifest, so the book can be
+ * opened and its chapters streamed without pulling every file. Deliberately
+ * stamps nothing: a manifest is not a download, and `downloadedAt` drives the
+ * library's Download button.
+ */
+export async function downloadAudiobookManifest(
+  appService: AppService,
+  fs: FileSystem,
+  localBooksDir: string,
+  book: Book,
+): Promise<AudiobookManifest | null> {
+  if (book.format !== 'AUDIOBOOK') return null;
+  if (!(await fs.exists(getDir(book), 'Books'))) {
+    await fs.createDir(getDir(book), 'Books');
+  }
+  const manifestLfp = getAudiobookManifestFilename(book);
+  try {
+    await downloadCloudFile(
+      appService,
+      localBooksDir,
+      manifestLfp,
+      `${CLOUD_BOOKS_SUBDIR}/${manifestLfp}`,
+      () => {},
+    );
+  } catch {
+    return null;
+  }
+  return loadLocalAudiobookManifest(fs, book);
 }
 
 /**

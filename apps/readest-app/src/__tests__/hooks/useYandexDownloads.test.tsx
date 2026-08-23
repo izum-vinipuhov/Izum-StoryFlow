@@ -6,6 +6,9 @@ const mocks = vi.hoisted(() => ({
   saveLibraryBooks: vi.fn<(books: Book[]) => Promise<void>>(async () => {}),
   queueUpload: vi.fn(),
   startJob: vi.fn(),
+  fetchWithAuth: vi.fn<(...args: unknown[]) => Promise<Response>>(
+    async () => ({ ok: true }) as Response,
+  ),
   readFile: vi.fn<() => Promise<string | ArrayBuffer>>(async () => {
     throw new Error('ENOENT');
   }),
@@ -33,6 +36,10 @@ vi.mock('@/services/transferManager', () => ({
 
 vi.mock('@/services/yandex/yandexDownloadsManager', () => ({
   yandexDownloadsManager: { startJob: mocks.startJob },
+}));
+
+vi.mock('@/utils/fetch', () => ({
+  fetchWithAuth: (...args: unknown[]) => mocks.fetchWithAuth(...args),
 }));
 
 import { useLibraryStore } from '@/store/libraryStore';
@@ -78,14 +85,66 @@ afterEach(() => {
 });
 
 describe('useYandexDownloads', () => {
-  test('queues the cloud upload for the imported book when the target is the server', async () => {
+  test('submits the job to the server API when the target is the server', async () => {
+    const { result } = renderHook(() => useYandexDownloads());
+
+    const spec: YandexJobSpec = {
+      id: 'uuid1',
+      resourceType: 'book',
+      title: 'Ведьмак',
+      author: 'Сапковский',
+      coverUrl: 'https://covers/1.jpeg',
+      files: [{ name: 'uuid1.epub', url: 'https://yandex/x', path: 'x.epub', base: 'Cache' }],
+    };
+    await act(async () => {
+      await result.current.startDownload(spec, { target: 'server' });
+    });
+
+    expect(mocks.startJob).not.toHaveBeenCalled();
+    expect(mocks.fetchWithAuth).toHaveBeenCalledTimes(1);
+    const [url, options] = mocks.fetchWithAuth.mock.calls[0]! as [
+      unknown,
+      { method?: string; body?: string },
+    ];
+    expect(String(url)).toContain('/yandex/jobs');
+    expect(options).toMatchObject({ method: 'POST' });
+    const body = JSON.parse(options.body as string) as Record<string, unknown>;
+    expect(body).toMatchObject({
+      id: 'uuid1',
+      resourceType: 'book',
+      files: [{ name: 'uuid1.epub', url: 'https://yandex/x' }],
+    });
+  });
+
+  test('defaults to the server target when none is passed', async () => {
     const { result } = renderHook(() => useYandexDownloads());
 
     await act(async () => {
-      await result.current.startDownload({} as YandexJobSpec, { target: 'server' });
+      await result.current.startDownload({
+        id: 'uuid1',
+        resourceType: 'book',
+        title: '',
+        author: '',
+        coverUrl: '',
+        files: [],
+      });
     });
-    expect(jobDeps?.onBooksImported).toBeDefined();
 
+    expect(mocks.fetchWithAuth).toHaveBeenCalledTimes(1);
+    expect(mocks.startJob).not.toHaveBeenCalled();
+  });
+
+  test('falls back to the local flow when the server target is unavailable', async () => {
+    authMock.user = null;
+    const { result } = renderHook(() => useYandexDownloads());
+
+    await act(async () => {
+      await result.current.startDownload(
+        { id: 'uuid1', resourceType: 'book', title: '', author: '', coverUrl: '', files: [] },
+        { target: 'server' },
+      );
+    });
+    expect(mocks.startJob).toHaveBeenCalledTimes(1);
     await act(async () => {
       await jobDeps?.onBooksImported?.([makeBook('h1')]);
     });
@@ -93,16 +152,19 @@ describe('useYandexDownloads', () => {
       vi.advanceTimersByTime(3000);
     });
 
-    expect(mocks.queueUpload).toHaveBeenCalledTimes(1);
-    expect(mocks.queueUpload).toHaveBeenCalledWith(expect.objectContaining({ hash: 'h1' }));
     expect(mocks.saveLibraryBooks).toHaveBeenCalledWith([expect.objectContaining({ hash: 'h1' })]);
+    // No signed-in user — nothing to upload to.
+    expect(mocks.queueUpload).not.toHaveBeenCalled();
   });
 
-  test('skips the cloud upload when the target is local', async () => {
+  test('skips the cloud upload when the target is local and stamps the Yandex origin', async () => {
     const { result } = renderHook(() => useYandexDownloads());
 
     await act(async () => {
-      await result.current.startDownload({} as YandexJobSpec, { target: 'local' });
+      await result.current.startDownload(
+        { id: 'uuid2', resourceType: 'book', title: '', author: '', coverUrl: '', files: [] },
+        { target: 'local' },
+      );
     });
 
     await act(async () => {
@@ -113,23 +175,9 @@ describe('useYandexDownloads', () => {
     });
 
     expect(mocks.queueUpload).not.toHaveBeenCalled();
-    expect(mocks.saveLibraryBooks).toHaveBeenCalledWith([expect.objectContaining({ hash: 'h2' })]);
-  });
-
-  test('defaults to the server target when none is passed', async () => {
-    const { result } = renderHook(() => useYandexDownloads());
-
-    await act(async () => {
-      await result.current.startDownload({} as YandexJobSpec);
-    });
-    await act(async () => {
-      await jobDeps?.onBooksImported?.([makeBook('h3')]);
-    });
-    act(() => {
-      vi.advanceTimersByTime(3000);
-    });
-
-    expect(mocks.queueUpload).toHaveBeenCalledTimes(1);
+    expect(mocks.saveLibraryBooks).toHaveBeenCalledTimes(1);
+    const saved = mocks.saveLibraryBooks.mock.calls[0]![0] as Book[];
+    expect(saved[0]!.metadata?.yandex).toEqual({ uuid: 'uuid2' });
   });
 
   test('records the ebook hash in the yandex import index on import', async () => {

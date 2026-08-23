@@ -1,6 +1,8 @@
 import type { AppService } from '@/types/system';
 import type { AudiobookChapter, AudiobookManifest } from '@/types/audiobook';
-import { AUDIO_MIME_TYPES } from '../mediaOverlay/MediaOverlayClient';
+import { clearChapterUrl, resolveAudiobookChapterSource } from './chapterSource';
+import { createAudiobookAudioTransport, type AudiobookAudioTransport } from './audioTransport';
+import { NativeAudiobookPlayer } from './NativeAudiobookPlayer';
 
 export interface AudiobookPlaybackInfo {
   position: number;
@@ -18,7 +20,7 @@ type AudiobookPlayerState = 'stopped' | 'playing' | 'paused';
  * unchanged. The TTS player UI consumes it through useAudiobookPlayback.
  */
 export class AudiobookChapterPlayer extends EventTarget {
-  private audio: HTMLAudioElement | null = null;
+  private audio: AudiobookAudioTransport | null = null;
   private appService: AppService | null = null;
   private chapters: AudiobookChapter[] = [];
   private currentIndex = -1;
@@ -29,6 +31,13 @@ export class AudiobookChapterPlayer extends EventTarget {
   private _state: AudiobookPlayerState = 'stopped';
   private _terminated = false;
   private autoplayNext = true;
+
+  /** Play chapters missing from this device straight from cloud storage. */
+  streamable = false;
+  /** True while the loaded source is an object URL this player must revoke. */
+  private sourceIsObjectUrl = false;
+  /** Chapter whose stream URL has already been re-signed once after an error. */
+  private streamRetryIndex = -1;
 
   /** TTS-session plumbing expects this public field. */
   stopAtChapterEnd = false;
@@ -85,27 +94,39 @@ export class AudiobookChapterPlayer extends EventTarget {
     return this.durations.reduce((sum, duration) => sum + (duration || 0), 0);
   }
 
+  private releaseSource() {
+    if (this.audio && this.sourceIsObjectUrl && this.audio.src.startsWith('blob:')) {
+      URL.revokeObjectURL(this.audio.src);
+    }
+    this.sourceIsObjectUrl = false;
+  }
+
   private async loadChapter(index: number, startSec: number, autoplay: boolean) {
     if (!this.appService || !this.chapters[index]) return;
-    if (this.audio) {
-      this.audio.pause();
-      if (this.audio.src) URL.revokeObjectURL(this.audio.src);
-      this.audio.src = '';
+    // The manifest records each chapter's actual file (Yandex chapters are
+    // m4a, hybrid imports preserve the picked audio extension), so resolve
+    // that path instead of recomputing an m4a name. Resolve before touching
+    // the element so a failure does not kill what is currently playing.
+    const chapter = this.chapters[index]!;
+    const source = await resolveAudiobookChapterSource(this.appService, chapter, this.streamable);
+    if (!source) {
+      // Neither on disk nor reachable in the cloud — nothing can play.
+      this.stop();
+      return;
     }
-    const audio = (this.audio ??= new Audio());
+    if (this.audio) this.audio.pause();
+    const audio = (this.audio ??= createAudiobookAudioTransport());
+    this.releaseSource();
     audio.preservesPitch = true;
     audio.playbackRate = this.rate;
-    // The manifest records each chapter's actual file (Yandex chapters are
-    // m4a, hybrid imports preserve the picked audio extension), so read that
-    // path instead of recomputing an m4a name.
-    const chapter = this.chapters[index]!;
-    const data = (await this.appService.readFile(chapter.file, 'Books', 'binary')) as ArrayBuffer;
-    const ext = chapter.file.split('.').pop()?.toLowerCase() ?? '';
-    const blob = new Blob([data], { type: AUDIO_MIME_TYPES[ext] ?? 'audio/mpeg' });
-    audio.src = URL.createObjectURL(blob);
+    audio.src = source.url;
+    this.sourceIsObjectUrl = source.isObjectUrl;
     audio.currentTime = startSec;
     this.currentIndex = index;
     this.positionSec = startSec;
+    if (audio instanceof NativeAudiobookPlayer) {
+      audio.setKnownDurationSec(chapter.durationSec);
+    }
 
     this.dispatchEvent(
       new CustomEvent('tts-speak-mark', {
@@ -242,7 +263,7 @@ export class AudiobookChapterPlayer extends EventTarget {
     this._terminated = true;
     this.stop();
     if (this.audio) {
-      if (this.audio.src) URL.revokeObjectURL(this.audio.src);
+      this.releaseSource();
       this.audio.src = '';
       this.audio = null;
     }
@@ -254,7 +275,7 @@ export class AudiobookChapterPlayer extends EventTarget {
   /** Wire the internal audio element events (call once after construction). */
   bindAudioEvents() {
     if (this.audio) return;
-    const audio = (this.audio ??= new Audio());
+    const audio = (this.audio ??= createAudiobookAudioTransport());
     audio.addEventListener('timeupdate', () => {
       this.positionSec = audio.currentTime;
       this.dispatchEvent(
@@ -264,9 +285,23 @@ export class AudiobookChapterPlayer extends EventTarget {
       );
     });
     audio.addEventListener('loadedmetadata', () => {
+      // The chapter loaded, so a later failure earns a fresh retry.
+      this.streamRetryIndex = -1;
       if (this.currentIndex >= 0 && audio.duration > 0) {
         this.durations[this.currentIndex] = audio.duration;
       }
+    });
+    audio.addEventListener('error', () => {
+      // A presigned URL outlives most chapters but not all of them, and a
+      // seek into an unbuffered region re-requests it. Re-sign once and
+      // resume where the listener was; a genuinely missing object (404) must
+      // fall through to the download prompt instead of looping.
+      const chapter = this.chapters[this.currentIndex];
+      if (!chapter || this.sourceIsObjectUrl) return;
+      if (this.streamRetryIndex === this.currentIndex) return;
+      this.streamRetryIndex = this.currentIndex;
+      clearChapterUrl(chapter.file);
+      void this.loadChapter(this.currentIndex, this.positionSec, this._state === 'playing');
     });
     audio.addEventListener('ended', () => {
       if (!this.autoplayNext) {

@@ -61,6 +61,7 @@ const TTSControl: React.FC<TTSControlProps> = ({ bookKey, gridInsets }) => {
     ? {
         chapters: audiobook.chapters,
         activeIndex: audiobook.activeIndex,
+        canStream: audiobook.canStream,
         isChapterLocal: audiobook.isChapterLocal,
         isChapterDownloading: audiobook.isChapterDownloading,
         onPlay: (index) => void audiobook.play(index),
