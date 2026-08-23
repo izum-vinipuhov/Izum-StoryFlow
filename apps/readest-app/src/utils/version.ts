@@ -5,6 +5,10 @@ export const getAppVersion = () => {
   return packageJson.version;
 };
 
+// The upstream Readest version this fork is based on, shown in the About
+// window next to the app's own (fork) version.
+export const READEST_BASE_VERSION = '0.12.1';
+
 export interface ParsedUpdateVersion {
   base: string; // "X.Y.Z"
   stamp: number | null; // YYYYMMDDHH, or null when not a nightly

@@ -1,17 +1,13 @@
 import { PiUserCircle } from 'react-icons/pi';
-import { useTranslation } from '@/hooks/useTranslation';
-import { PlanDetails } from '../utils/plan';
 import UserAvatar from '@/components/UserAvatar';
 
 interface UserInfoProps {
   avatarUrl?: string;
   userFullName: string;
   userEmail: string;
-  planDetails: PlanDetails;
 }
 
-const UserInfo: React.FC<UserInfoProps> = ({ avatarUrl, userFullName, userEmail, planDetails }) => {
-  const _ = useTranslation();
+const UserInfo: React.FC<UserInfoProps> = ({ avatarUrl, userFullName, userEmail }) => {
   return (
     <div className='flex flex-col items-center gap-x-6 gap-y-2 md:flex-row md:items-center'>
       {/* Lock the avatar box to a square via classes so it can't go oval
@@ -36,13 +32,6 @@ const UserInfo: React.FC<UserInfoProps> = ({ avatarUrl, userFullName, userEmail,
       <div className='flex-grow text-center md:text-left'>
         <h2 className='text-base-content text-xl font-bold md:text-2xl'>{userFullName}</h2>
         <p className='text-base-content/60'>{userEmail}</p>
-        <div className='mt-3'>
-          <span
-            className={`inline-block rounded-full px-3 py-1 text-sm font-medium ${planDetails.color}`}
-          >
-            {_(planDetails.name)}
-          </span>
-        </div>
       </div>
     </div>
   );
