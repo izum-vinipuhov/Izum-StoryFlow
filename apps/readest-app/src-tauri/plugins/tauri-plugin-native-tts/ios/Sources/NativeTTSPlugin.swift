@@ -63,13 +63,15 @@ struct PlayoutControlArgs: Decodable {
   // 'start-session' | 'end-session' | 'abort' | 'pause' | 'resume' | 'set-rate'
   // | 'load' | 'seek'
   //
-  // 'load' plays a long continuous file (Media Overlay narration) from `path`,
-  // optionally seeking to `positionMs`. Unlike enqueue, it does not trim Edge
-  // silence and does not delete the file — JS owns the staged temp path.
+  // 'load' plays a long continuous source (Media Overlay narration, streamed
+  // audiobook chapter) from `path` or a remote `url`, optionally seeking to
+  // `positionMs`. Unlike enqueue, it does not trim Edge silence and does not
+  // delete the file — JS owns the staged temp path.
   // 'seek' moves the playhead of the current item to `positionMs`.
   let action: String
   let rate: Double?
   let path: String?
+  let url: String?
   let positionMs: Double?
 }
 
@@ -88,6 +90,9 @@ struct PlayoutPositionResponse: Encodable {
   let index: Int
   let positionMs: Double
   let playing: Bool
+  // The current item's duration once it is loaded (remote chapters report it
+  // asynchronously, so the JS side seeds the manifest duration meanwhile).
+  let durationMs: Double?
 }
 
 // MARK: - Command responses (camelCase, re-decoded by the Rust models)
@@ -1042,12 +1047,12 @@ class NativeTTSPlugin: Plugin, AVSpeechSynthesizerDelegate {
           }
           invoke.resolve(PlayoutControlResponse(session: nil))
         case "load":
-          guard let path = args.path, !path.isEmpty else {
-            invoke.reject("playout load requires path")
+          guard let source = args.url ?? args.path, !source.isEmpty else {
+            invoke.reject("playout load requires url or path")
             return
           }
           let startMs = args.positionMs ?? 0
-          self.loadContinuousFile(path: path, startMs: startMs)
+          self.loadContinuousFile(source: source, startMs: startMs)
           invoke.resolve(PlayoutControlResponse(session: self.playoutSession))
         case "seek":
           let positionMs = args.positionMs ?? 0
@@ -1117,7 +1122,7 @@ class NativeTTSPlugin: Plugin, AVSpeechSynthesizerDelegate {
   // Continuous long-file playout for Media Overlay. Reuses the Edge playout
   // AVPlayer so Now Playing / session ownership stay in-process; skips silence
   // trimming and never deletes the staged path (JS owns it).
-  private func loadContinuousFile(path: String, startMs: Double) {
+  private func loadContinuousFile(source: String, startMs: Double) {
     // A prior Edge queue would fight continuous playback; clear it without
     // tearing down the session id the JS side is bound to.
     playoutGapTimer?.invalidate()
@@ -1129,12 +1134,12 @@ class NativeTTSPlugin: Plugin, AVSpeechSynthesizerDelegate {
     playoutQueue.removeAll()
     playoutSessionEnded = false
 
-    // Same path already loaded: seek in place so paragraph handovers and
+    // Same source already loaded: seek in place so paragraph handovers and
     // discontinuity seeks don't rebuild the item (audible glitch). Playback
     // stays under JS control (play/pause) — do not auto-resume here.
     let alreadyLoaded =
-      playoutLoadedPath == path && playoutPlayer?.currentItem != nil && playoutCurrentIndex == 0
-    playoutLoadedPath = path
+      playoutLoadedPath == source && playoutPlayer?.currentItem != nil && playoutCurrentIndex == 0
+    playoutLoadedPath = source
     if alreadyLoaded {
       seekPlayout(toMs: startMs)
       return
@@ -1146,7 +1151,9 @@ class NativeTTSPlugin: Plugin, AVSpeechSynthesizerDelegate {
       playoutPlayer = player
     }
     bindNowPlayingSession(to: playoutPlayer!)
-    let url = URL(fileURLWithPath: path)
+    // A remote chapter streams straight into AVPlayer (range requests
+    // included); staged narration chapters arrive as local file paths.
+    let url = source.hasPrefix("http") ? URL(string: source)! : URL(fileURLWithPath: source)
     let playerItem = AVPlayerItem(url: url)
     playerItem.audioTimePitchAlgorithm = .timeDomain
     if let observer = playoutItemEndObserver {
@@ -1219,12 +1226,20 @@ class NativeTTSPlugin: Plugin, AVSpeechSynthesizerDelegate {
     DispatchQueue.main.async {
       let time = self.playoutPlayer?.currentTime()
       let seconds = time.map { CMTimeGetSeconds($0) } ?? 0
+      var durationMs: Double? = nil
+      if let item = self.playoutPlayer?.currentItem {
+        let total = CMTimeGetSeconds(item.duration)
+        if total.isFinite && total > 0 {
+          durationMs = total * 1000.0
+        }
+      }
       invoke.resolve(
         PlayoutPositionResponse(
           session: self.playoutSession,
           index: self.playoutCurrentIndex,
           positionMs: seconds.isFinite ? seconds * 1000.0 : 0,
-          playing: (self.playoutPlayer?.rate ?? 0) != 0
+          playing: (self.playoutPlayer?.rate ?? 0) != 0,
+          durationMs: durationMs
         ))
     }
   }

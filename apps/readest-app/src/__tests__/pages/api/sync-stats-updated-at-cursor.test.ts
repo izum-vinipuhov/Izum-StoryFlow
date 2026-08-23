@@ -41,6 +41,12 @@ vi.mock('@/utils/supabase', () => ({
 vi.mock('@/utils/access', () => ({
   validateUserAndToken: async () => ({ user: { id: 'u1' }, token: 'tok' }),
 }));
+// The mode sweep is exercised by its own service test; the flag itself stays
+// real (default ON).
+vi.mock('@/services/sharedLibrary', async (orig) => ({
+  ...(await orig<typeof import('@/services/sharedLibrary')>()),
+  ensureSharedLibraryMode: vi.fn(async () => {}),
+}));
 
 import { GET } from '@/pages/api/sync';
 

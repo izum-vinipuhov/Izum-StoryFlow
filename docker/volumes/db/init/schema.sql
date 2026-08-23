@@ -25,6 +25,9 @@ CREATE TABLE public.books (
   group_id text NULL,
   group_name text NULL,
   metadata json NULL,
+  -- Server-side shared library (migration 020): rows whose files live on the
+  -- server are visible to every authenticated user; written only server-side.
+  shared boolean NOT NULL DEFAULT false,
   CONSTRAINT books_pkey PRIMARY KEY (user_id, book_hash),
   CONSTRAINT books_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users (id) ON DELETE CASCADE
 );
@@ -34,6 +37,8 @@ CREATE TABLE public.books (
 -- server-resolved merge propagates without reordering the date-read library.
 -- See migration 016_add_books_synced_at.sql (issue #4678).
 CREATE INDEX idx_books_user_synced ON public.books (user_id, synced_at);
+-- Shared branch of the books pull (migration 020).
+CREATE INDEX idx_books_shared_synced ON public.books (shared, synced_at);
 
 CREATE OR REPLACE FUNCTION public.set_books_synced_at()
 RETURNS trigger
@@ -51,7 +56,9 @@ CREATE TRIGGER books_set_synced_at
   EXECUTE FUNCTION public.set_books_synced_at();
 
 ALTER TABLE public.books ENABLE ROW LEVEL SECURITY;
-CREATE POLICY select_books ON public.books FOR SELECT TO authenticated USING ((SELECT auth.uid()) = user_id);
+-- Shared rows may be READ by any authenticated user (migration 020);
+-- writes stay owner-only.
+CREATE POLICY select_books ON public.books FOR SELECT TO authenticated USING ((SELECT auth.uid()) = user_id OR shared = true);
 CREATE POLICY insert_books ON public.books FOR INSERT TO authenticated WITH CHECK ((SELECT auth.uid()) = user_id);
 CREATE POLICY update_books ON public.books FOR UPDATE TO authenticated USING ((SELECT auth.uid()) = user_id);
 CREATE POLICY delete_books ON public.books FOR DELETE TO authenticated USING ((SELECT auth.uid()) = user_id);
@@ -124,6 +131,9 @@ CREATE TABLE public.files (
 CREATE INDEX idx_files_user_id_deleted_at ON public.files (user_id, deleted_at);
 CREATE INDEX idx_files_file_key ON public.files (file_key);
 CREATE INDEX idx_files_file_key_deleted_at ON public.files (file_key, deleted_at);
+-- Shared-library membership check: the caller's live files for a book hash
+-- (migration 020).
+CREATE INDEX idx_files_user_book_hash ON public.files (user_id, book_hash);
 
 ALTER TABLE public.files ENABLE ROW LEVEL SECURITY;
 CREATE POLICY files_insert ON public.files FOR INSERT WITH CHECK (auth.uid() = user_id);

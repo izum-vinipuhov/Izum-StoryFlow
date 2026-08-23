@@ -124,6 +124,8 @@ pub struct PlayoutControlRequest {
     pub rate: Option<f64>,
     // Absolute file path for action "load" (Media Overlay continuous playout).
     pub path: Option<String>,
+    // Remote chapter URL for action "load" (streamed audiobook playback).
+    pub url: Option<String>,
     // Seek target for actions "load" and "seek", in milliseconds.
     pub position_ms: Option<f64>,
 }
@@ -141,4 +143,6 @@ pub struct PlayoutPositionResponse {
     pub index: i32,
     pub position_ms: f64,
     pub playing: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub duration_ms: Option<f64>,
 }

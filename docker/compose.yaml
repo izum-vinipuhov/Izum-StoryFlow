@@ -153,6 +153,16 @@ services:
       # the pro plan, ungating cloud sync, offline TTS cache, email-in and
       # the top-plan quotas without a paid subscription.
       PREMIUM_ENABLED: ${PREMIUM_ENABLED:-false}
+      # Server-side Yandex downloads: the client submits a job and the
+      # server streams the files into object storage in the background.
+      # Requires a long-running single-instance client container (jobs live
+      # in-process); do not enable on serverless deployments.
+      YANDEX_SERVER_DOWNLOADS: '1'
+      # Shared library (on by default): every book whose files live on the
+      # server is visible in the library of every authenticated user, while
+      # positions, notes, reading status and metadata edits stay per-user.
+      # Set to 'false' to restore the uploader-only library.
+      SHARED_LIBRARY: ${SHARED_LIBRARY:-true}
     depends_on:
       - kong
       - minio

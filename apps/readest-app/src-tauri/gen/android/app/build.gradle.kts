@@ -73,6 +73,12 @@ android {
             }
         }
         getByName("release") {
+            // Self-hosted servers commonly run over plain http (docker compose
+            // defaults), and streamed audiobook chapters are fetched by the
+            // WebView itself — unlike API calls, which route through Rust. A
+            // per-domain network-security-config cannot express a user-chosen
+            // host, so cleartext is allowed app-wide.
+            manifestPlaceholders["usesCleartextTraffic"] = "true"
             isMinifyEnabled = true
             if (keystorePropertiesFile.exists()) {
                 signingConfig = signingConfigs.getByName("signing")

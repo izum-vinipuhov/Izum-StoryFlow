@@ -93,6 +93,14 @@ export type BookMetadata = {
 
   calibreColumns?: CalibreCustomColumn[];
   feedUrl?: string;
+
+  /**
+   * Yandex Books origin stamp: which Yandex resource this book came from
+   * (uuid), and the manifest hash of the audiobook attached to it, if any.
+   * Set on import (local and server-side) and synced with the metadata json
+   * so every device can tell a Yandex part is already downloaded.
+   */
+  yandex?: { uuid: string; audiobookHash?: string };
 };
 
 export interface BookDoc {

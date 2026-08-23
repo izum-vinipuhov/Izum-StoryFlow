@@ -23,16 +23,44 @@ vi.mock('@/services/yandex/yandexDownloadsManager', () => ({
   },
 }));
 
+const serverActionMocks = vi.hoisted(() => ({
+  pauseServerJob: vi.fn(),
+  resumeServerJob: vi.fn(),
+  cancelServerJob: vi.fn(),
+  dismissServerJob: vi.fn(),
+  useYandexServerJobs: vi.fn(() => ({
+    poll: vi.fn(),
+    pauseJob: vi.fn(),
+    resumeJob: vi.fn(),
+    cancelJob: vi.fn(),
+    dismissJob: vi.fn(),
+  })),
+}));
+
+vi.mock('@/hooks/useYandexServerJobs', () => ({
+  pauseServerJob: (...args: unknown[]) => serverActionMocks.pauseServerJob(...args),
+  resumeServerJob: (...args: unknown[]) => serverActionMocks.resumeServerJob(...args),
+  cancelServerJob: (...args: unknown[]) => serverActionMocks.cancelServerJob(...args),
+  dismissServerJob: (...args: unknown[]) => serverActionMocks.dismissServerJob(...args),
+  useYandexServerJobs: () => serverActionMocks.useYandexServerJobs(),
+}));
+
 import YandexDownloadsPanel, {
   setYandexDownloadsPanelVisible,
 } from '@/app/library/components/YandexDownloadsPanel';
 import { useYandexDownloadsStore, type YandexDownloadJob } from '@/store/yandexDownloadsStore';
+import { useYandexServerJobsStore } from '@/store/yandexServerJobsStore';
 
 beforeEach(() => {
   useYandexDownloadsStore.getState().clearAll();
+  useYandexServerJobsStore.getState().clear();
   managerMocks.pauseJob.mockReset();
   managerMocks.resumeJob.mockReset();
   managerMocks.cancelJob.mockReset();
+  serverActionMocks.pauseServerJob.mockReset();
+  serverActionMocks.resumeServerJob.mockReset();
+  serverActionMocks.cancelServerJob.mockReset();
+  serverActionMocks.dismissServerJob.mockReset();
 });
 
 afterEach(() => {
@@ -89,5 +117,29 @@ describe('YandexDownloadsPanel', () => {
     await waitFor(() => {
       expect(useYandexDownloadsStore.getState().jobs).toHaveLength(1);
     });
+  });
+
+  it('lists server jobs and routes their controls to the API actions', async () => {
+    useYandexServerJobsStore
+      .getState()
+      .setJobs([makeJob({ id: 'server1', status: 'downloading' })]);
+    render(<YandexDownloadsPanel />);
+    setYandexDownloadsPanelVisible(true);
+
+    expect(await screen.findByText('Ведьмак')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Pause' }));
+    expect(serverActionMocks.pauseServerJob).toHaveBeenCalledWith('server1');
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(serverActionMocks.cancelServerJob).toHaveBeenCalledWith('server1');
+  });
+
+  it('hides a server row when a local session job claims the same id', async () => {
+    useYandexDownloadsStore.getState().addJob(makeJob());
+    useYandexServerJobsStore.getState().setJobs([makeJob()]);
+    render(<YandexDownloadsPanel />);
+    setYandexDownloadsPanelVisible(true);
+
+    expect(await screen.findByText('Ведьмак')).toBeTruthy();
+    expect(screen.getAllByText('Ведьмак')).toHaveLength(1);
   });
 });

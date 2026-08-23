@@ -3,6 +3,7 @@ import {
   deleteBook,
   downloadAttachedAudiobook,
   downloadAttachedAudiobookChapter,
+  downloadAudiobookManifest,
   downloadBook,
   uploadBook,
 } from '@/services/cloudService';
@@ -243,6 +244,35 @@ describe('cloudService audiobook sync', () => {
         'Readest/Books/abc123/audiobook/chapter_0.m4a',
         'Readest/Books/abc123/audiobook/chapter_1.m4a',
       ]);
+    });
+
+    test('downloadAudiobookManifest fetches only the manifest and stamps nothing', async () => {
+      // A standalone audiobook must be openable without pulling every chapter:
+      // the reader streams them. Stamping downloadedAt here would make the
+      // library hide its Download button for a book that is not on the device.
+      const book = createMockAudiobook({ uploadedAt: Date.now() });
+      vi.mocked(mockFs.exists).mockResolvedValue(false);
+      const appService = {} as AppService;
+
+      const result = await downloadAudiobookManifest(appService, mockFs, '/books', book);
+
+      expect(result?.chapters).toHaveLength(2);
+      const { downloadFile } = await import('@/libs/storage');
+      const cfps = vi.mocked(downloadFile).mock.calls.map((call) => call[0].cfp);
+      expect(cfps).toEqual(['Readest/Books/abc123/chapters.json']);
+      expect(book.downloadedAt).toBeNull();
+      expect(book.coverDownloadedAt).toBeNull();
+    });
+
+    test('downloadAudiobookManifest returns null when the manifest is not in cloud', async () => {
+      const book = createMockAudiobook({ uploadedAt: Date.now() });
+      vi.mocked(mockFs.exists).mockResolvedValue(false);
+      const { downloadFile } = await import('@/libs/storage');
+      vi.mocked(downloadFile).mockRejectedValueOnce(new Error('404'));
+
+      await expect(
+        downloadAudiobookManifest({} as AppService, mockFs, '/books', book),
+      ).resolves.toBeNull();
     });
 
     test('downloadAttachedAudiobookChapter fetches a single chapter file', async () => {

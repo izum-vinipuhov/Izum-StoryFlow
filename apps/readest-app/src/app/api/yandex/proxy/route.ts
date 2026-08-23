@@ -1,61 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { isBlockedHost } from '@/utils/network';
-
-// Cap redirect hops so the SSRF host check below can re-run on every one.
-const MAX_REDIRECTS = 5;
-
-// In `next dev` the server runs on the developer's own machine, mirroring the
-// OPDS proxy's development allowance for local targets.
-const isPrivateHostAllowed = () => process.env.NODE_ENV === 'development';
-
-class SsrfBlockedError extends Error {}
-
-const YANDEX_APP_USER_AGENT = 'Samsung/Galaxy_A51 Android/12 Bookmate/3.7.3';
+import {
+  fetchYandexResource,
+  isPrivateHostAllowed,
+  YandexSsrfBlockedError,
+} from '@/services/yandex/serverFetch';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type',
-};
-
-// The Yandex Books API authenticates via a raw `auth-token` header. CDN
-// redirects are pre-signed and must NOT receive the token, so it is attached
-// on the first hop only. The token arrives in a dedicated query param and is
-// deliberately never logged.
-const fetchFollowingRedirects = async (
-  startUrl: string,
-  token: string,
-  range: string | null,
-): Promise<Response> => {
-  let currentUrl = startUrl;
-  let withAuth = true;
-  for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
-    const parsed = new URL(currentUrl);
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-      throw new SsrfBlockedError('Only http(s) URLs are supported');
-    }
-    if (!isPrivateHostAllowed() && isBlockedHost(parsed.hostname)) {
-      throw new SsrfBlockedError('This URL is not allowed');
-    }
-    const headers = new Headers();
-    if (withAuth) {
-      headers.set('app-user-agent', YANDEX_APP_USER_AGENT);
-      headers.set('auth-token', token);
-    }
-    if (range) headers.set('Range', range);
-    const response = await fetch(currentUrl, {
-      method: 'GET',
-      headers,
-      redirect: 'manual',
-    });
-    if (response.status >= 300 && response.status < 400 && response.headers.has('location')) {
-      currentUrl = new URL(response.headers.get('location')!, currentUrl).toString();
-      withAuth = false;
-      continue;
-    }
-    return response;
-  }
-  throw new SsrfBlockedError('Too many redirects');
 };
 
 async function handleRequest(request: NextRequest) {
@@ -89,7 +43,7 @@ async function handleRequest(request: NextRequest) {
   }
 
   try {
-    const response = await fetchFollowingRedirects(url, token, range);
+    const response = await fetchYandexResource(url, token, { range });
 
     const passthroughHeaders = (extras: Record<string, string>) => {
       const headers = new Headers(CORS_HEADERS);
@@ -135,7 +89,7 @@ async function handleRequest(request: NextRequest) {
       }),
     });
   } catch (error) {
-    if (error instanceof SsrfBlockedError) {
+    if (error instanceof YandexSsrfBlockedError) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
     console.error('[Yandex Proxy] Error:', error instanceof Error ? error.message : error);

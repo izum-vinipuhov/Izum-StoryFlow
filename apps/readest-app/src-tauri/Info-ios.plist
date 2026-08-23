@@ -6,6 +6,14 @@
     <string>en</string>
     <key>NSLocalNetworkUsageDescription</key>
     <string>Readest uses the local network to discover nearby devices and transfer books with LocalSend.</string>
+    <!-- Self-hosted servers commonly run over plain http on the LAN; allow
+         cleartext for local-network hosts (IPs, .local) without opening ATS
+         to arbitrary internet hosts. -->
+    <key>NSAppTransportSecurity</key>
+    <dict>
+      <key>NSAllowsLocalNetworking</key>
+      <true/>
+    </dict>
     <key>CFBundleLocalizations</key>
     <array>
       <string>en</string>

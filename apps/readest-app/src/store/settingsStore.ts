@@ -63,7 +63,11 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   setRequestedSubPage: (subPage) => set({ requestedSubPage: subPage }),
 
   applyUILanguage: (uiLanguage?: string) => {
-    const locale = uiLanguage ? uiLanguage : navigator.language;
+    // When no explicit language is saved, keep whatever i18next already
+    // detected (localStorage / navigator) instead of forcing
+    // navigator.language: the boot applies this asynchronously and the two
+    // sources raced, so the UI language flipped between hard reloads.
+    const locale = uiLanguage || i18n.language || navigator.language;
     i18n.changeLanguage(locale);
     initDayjs(locale);
   },

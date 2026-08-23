@@ -1,9 +1,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+vi.mock('@/libs/storage', () => ({ getDownloadUrl: vi.fn() }));
+
 import type { AppService } from '@/types/system';
 import { AudiobookChapterPlayer } from '@/services/tts/audiobook/AudiobookChapterPlayer';
+import { clearChapterUrl } from '@/services/tts/audiobook/chapterSource';
+import { getDownloadUrl } from '@/libs/storage';
 import type { AudiobookManifest } from '@/types/audiobook';
 
 const appService = {
+  exists: vi.fn(async () => true),
   readFile: vi.fn(async () => new TextEncoder().encode('audio').buffer),
 } as unknown as AppService;
 
@@ -33,6 +39,11 @@ beforeEach(() => {
   URL.createObjectURL = vi.fn(() => 'blob:mock');
   URL.revokeObjectURL = vi.fn();
   vi.mocked(appService.readFile).mockClear();
+  vi.mocked(appService.exists).mockClear();
+  vi.mocked(appService.exists).mockResolvedValue(true);
+  vi.mocked(getDownloadUrl).mockReset();
+  vi.mocked(getDownloadUrl).mockResolvedValue('https://s3/chapter_001.m4a?sig=1');
+  manifest.chapters.forEach((chapter) => clearChapterUrl(chapter.file));
 });
 
 afterEach(() => {
@@ -124,6 +135,67 @@ describe('AudiobookChapterPlayer', () => {
       'binary',
     );
     expect(getAudio(player).currentTime).toBe(50);
+  });
+
+  it('streams a chapter that is not on disk instead of reading it', async () => {
+    vi.mocked(appService.exists).mockResolvedValue(false);
+    const player = makePlayer();
+    player.streamable = true;
+
+    await player.play(0);
+
+    expect(appService.readFile).not.toHaveBeenCalled();
+    expect(getAudio(player).src).toBe('https://s3/chapter_001.m4a?sig=1');
+    expect(player.state).toBe('playing');
+    // A streamed source is not an object URL — revoking it would be wrong.
+    expect(URL.revokeObjectURL).not.toHaveBeenCalled();
+  });
+
+  it('stops instead of playing when a chapter is neither local nor streamable', async () => {
+    vi.mocked(appService.exists).mockResolvedValue(false);
+    const player = makePlayer();
+    player.streamable = false;
+
+    await player.play(0);
+
+    expect(getDownloadUrl).not.toHaveBeenCalled();
+    expect(player.state).toBe('stopped');
+  });
+
+  it('re-signs a dead stream URL once when the element errors', async () => {
+    vi.mocked(appService.exists).mockResolvedValue(false);
+    vi.mocked(getDownloadUrl)
+      .mockResolvedValueOnce('https://s3/chapter_001.m4a?sig=expired')
+      .mockResolvedValue('https://s3/chapter_001.m4a?sig=fresh');
+    const player = makePlayer();
+    player.streamable = true;
+    await player.play(0);
+    const audio = getAudio(player);
+    audio.currentTime = 42;
+    audio.dispatchEvent(new Event('timeupdate'));
+
+    audio.dispatchEvent(new Event('error'));
+
+    await vi.waitFor(() => expect(audio.src).toBe('https://s3/chapter_001.m4a?sig=fresh'));
+    expect(audio.currentTime).toBe(42);
+
+    // A genuinely broken chapter (404) must not loop: the second error is
+    // ignored until a successful load resets the guard.
+    vi.mocked(getDownloadUrl).mockClear();
+    audio.dispatchEvent(new Event('error'));
+    await Promise.resolve();
+    expect(getDownloadUrl).not.toHaveBeenCalled();
+  });
+
+  it('does not try to re-sign a local chapter that fails to decode', async () => {
+    const player = makePlayer();
+    player.streamable = true;
+    await player.play(0);
+
+    getAudio(player).dispatchEvent(new Event('error'));
+    await Promise.resolve();
+
+    expect(getDownloadUrl).not.toHaveBeenCalled();
   });
 
   it('shutdown stops playback and releases the audio element', async () => {

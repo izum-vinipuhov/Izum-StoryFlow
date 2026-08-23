@@ -151,6 +151,35 @@ export const batchGetDownloadUrls = async (files: { lfp: string; cfp: string }[]
   }
 };
 
+/**
+ * Resolve the presigned GET URL for one cloud file.
+ *
+ * `expiresIn` (seconds, clamped by the route) goes FIRST in the query string:
+ * the route re-parses `fileKey` off the raw URL whenever it contains an `&`
+ * (file names can carry an encoded one) by taking everything after `fileKey=`,
+ * so a trailing parameter would be swallowed into the key.
+ */
+export const getDownloadUrl = async (cfp: string, expiresIn?: number): Promise<string> => {
+  const userId = await getUserID();
+  if (!userId) {
+    throw new Error('Not authenticated');
+  }
+  const fileKey = `${userId}/${cfp}`;
+  const expiry = expiresIn ? `expiresIn=${expiresIn}&` : '';
+  const response = await fetchWithAuth(
+    `${API_ENDPOINTS.download}?${expiry}fileKey=${encodeURIComponent(fileKey)}`,
+    {
+      method: 'GET',
+    },
+  );
+
+  const { downloadUrl } = await response.json();
+  if (!downloadUrl) {
+    throw new Error('No download URL available');
+  }
+  return downloadUrl;
+};
+
 type DownloadFileParams = {
   appService: AppService;
   dst: string;
@@ -173,27 +202,7 @@ export const downloadFile = async ({
   onProgress,
 }: DownloadFileParams) => {
   try {
-    let downloadUrl = url;
-    if (!downloadUrl) {
-      const userId = await getUserID();
-      if (!userId) {
-        throw new Error('Not authenticated');
-      }
-      const fileKey = `${userId}/${cfp}`;
-      const response = await fetchWithAuth(
-        `${API_ENDPOINTS.download}?fileKey=${encodeURIComponent(fileKey)}`,
-        {
-          method: 'GET',
-        },
-      );
-
-      const { downloadUrl: url } = await response.json();
-      downloadUrl = url;
-    }
-
-    if (!downloadUrl) {
-      throw new Error('No download URL available');
-    }
+    const downloadUrl = url || (await getDownloadUrl(cfp));
 
     if (isWebAppPlatform()) {
       const { headers: responseHeaders, blob } = await webDownload(
@@ -236,6 +245,22 @@ export const deleteFile = async (filePath: string) => {
     // callers dispatch this without awaiting, so throwing here surfaces as an
     // unhandled promise rejection (Sentry READEST-5). Log and swallow instead.
     console.warn('File deletion failed:', error);
+  }
+};
+
+/**
+ * Server-side deletion of every object registered for a book hash. Used for
+ * server-downloaded Yandex books that a device deletes without ever having
+ * the files locally — the local manifest that normally enumerates the cloud
+ * objects does not exist there. Best-effort, like deleteFile.
+ */
+export const deleteBookFilesFromCloud = async (bookHash: string) => {
+  try {
+    await fetchWithAuth(`${API_ENDPOINTS.delete}?bookHash=${encodeURIComponent(bookHash)}`, {
+      method: 'DELETE',
+    });
+  } catch (error) {
+    console.warn('Server-side book file deletion failed:', error);
   }
 };
 

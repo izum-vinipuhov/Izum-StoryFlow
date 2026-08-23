@@ -11,13 +11,45 @@ import {
   type YandexJobSpec,
 } from '@/services/yandex/yandexDownloadsManager';
 import { updateYandexImportIndex } from '@/services/yandex/yandexImportIndex';
+import { fetchWithAuth } from '@/utils/fetch';
+import { getAPIBaseUrl } from '@/services/environment';
+import { eventDispatcher } from '@/utils/event';
 
 /**
- * Where a Yandex download should end up: `server` mirrors the manual OPDS
- * path (files are uploaded to Readest Cloud after import), `local` keeps the
- * files only on this device — nothing is written to the server.
+ * Where a Yandex download should end up: `server` hands the job to the
+ * server (which streams the files into cloud storage — survives client
+ * refreshes/restarts), `local` downloads on this device only.
  */
 export type YandexDownloadTarget = 'local' | 'server';
+
+const toastError = (message: string) => {
+  eventDispatcher.dispatch('toast', { type: 'error', message });
+};
+
+/**
+ * Submits the spec to /api/yandex/jobs; the server downloads the files
+ * itself and the UI follows along via useYandexServerJobs polling.
+ */
+const startServerDownload = async (spec: YandexJobSpec): Promise<void> => {
+  const { settings } = useSettingsStore.getState();
+  const token = settings.yandexBooks?.accessToken ?? '';
+  await fetchWithAuth(`${getAPIBaseUrl()}/yandex/jobs`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      id: spec.id,
+      resourceType: spec.resourceType,
+      title: spec.title,
+      author: spec.author,
+      coverUrl: spec.coverUrl,
+      files: spec.files.map((file) => ({ name: file.name, url: file.url })),
+      ...(spec.audiobook
+        ? { audiobook: { hash: spec.audiobook.hash, chapters: spec.audiobook.chapters } }
+        : {}),
+      token,
+    }),
+  });
+};
 
 /**
  * Bridges the Yandex downloads manager to the library stores: starts a job
@@ -46,10 +78,39 @@ export function useYandexDownloads() {
     ) => {
       if (!appService) return;
       const target = opts?.target ?? 'server';
-      const { settings } = useSettingsStore.getState();
+
+      // Server target: the server does the download; the client only submits
+      // the job (and later polls its progress). Nothing local to interrupt.
+      if (target === 'server' && canDownloadToServer) {
+        try {
+          await startServerDownload(spec);
+        } catch (error) {
+          toastError(error instanceof Error ? error.message : 'Could not start the download');
+        }
+        return;
+      }
+
+      const { settings: settingsSnapshot } = useSettingsStore.getState();
       const librarySnapshot = [...useLibraryStore.getState().library];
 
       const persistImportedBooks = async (imported: Book[]) => {
+        // Stamp the Yandex origin on the imported books before saving: the
+        // metadata json syncs with the books channel, so every device can
+        // tell the resource is already downloaded (see BookMetadata.yandex).
+        const yandexUuid = spec.id.split('::')[0] ?? spec.id;
+        const attachHash = spec.audiobook?.attachToBookHash ? spec.audiobook.hash : undefined;
+        for (const book of imported) {
+          const base = book.metadata ?? {
+            title: book.title,
+            author: book.author,
+            language: 'und',
+          };
+          book.metadata = {
+            ...base,
+            yandex: { uuid: yandexUuid, ...(attachHash ? { audiobookHash: attachHash } : {}) },
+          };
+        }
+
         const currentLibrary = useLibraryStore.getState().library;
         const existingHashes = new Set(currentLibrary.map((b) => b.hash));
         const uniqueNewBooks = imported.filter((b) => !existingHashes.has(b.hash));
@@ -92,13 +153,13 @@ export function useYandexDownloads() {
 
       void yandexDownloadsManager.startJob(spec, {
         appService,
-        settings,
+        settings: settingsSnapshot,
         books: librarySnapshot,
         onBooksImported: persistImportedBooks,
         onBookImported: opts?.onBookImported,
       });
     },
-    [appService, user],
+    [appService, user, canDownloadToServer],
   );
 
   return { startDownload, canDownloadToServer };

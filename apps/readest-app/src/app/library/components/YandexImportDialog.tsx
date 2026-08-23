@@ -17,6 +17,14 @@ import { useEnv } from '@/context/EnvContext';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useSettingsStore } from '@/store/settingsStore';
 import { useYandexDownloadsStore, type YandexDownloadJob } from '@/store/yandexDownloadsStore';
+import { useYandexServerJobsStore } from '@/store/yandexServerJobsStore';
+import { useLibraryStore } from '@/store/libraryStore';
+import {
+  cancelServerJob,
+  dismissServerJob,
+  pauseServerJob,
+  resumeServerJob,
+} from '@/hooks/useYandexServerJobs';
 import { formatBytes } from '@/utils/book';
 import { useYandexDownloads, type YandexDownloadTarget } from '@/hooks/useYandexDownloads';
 import { setYandexTokenDialogVisible } from './YandexTokenDialog';
@@ -96,6 +104,7 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
   const { startDownload, canDownloadToServer } = useYandexDownloads();
   const { settings } = useSettingsStore();
   const jobs = useYandexDownloadsStore((state) => state.jobs);
+  const serverJobs = useYandexServerJobsStore((state) => state.serverJobs);
   const [url, setUrl] = useState('');
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -196,25 +205,39 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
         }
       }
       setInfo(nextInfo);
-      // Snapshot which parts are already on this device so repeated searches
-      // can disable the finished part instead of offering a re-download.
+      // Snapshot which parts are already downloaded so repeated searches can
+      // disable the finished part instead of offering a re-download. Two
+      // signals, OR'd: per-device availability (the local import index), and
+      // the synced-library Yandex stamp (covers server-side downloads and
+      // downloads made on other devices — the metadata json syncs with the
+      // books channel).
       if (appService) {
         const index = await loadYandexImportIndex(appService);
-        setPartStates({
-          book: nextInfo.book
-            ? await computeEbookPartState(appService, index, nextInfo.book.uuid)
-            : undefined,
-          audiobook: nextInfo.audiobook
-            ? await computeAudiobookPartState(
-                appService,
-                index,
-                buildChapters(nextInfo.audiobook.tracks).map(({ title, durationSec }) => ({
-                  title,
-                  durationSec,
-                })),
-              )
-            : undefined,
-        });
+        const yandexBooks = useLibraryStore
+          .getState()
+          .library.filter((b) => !b.deletedAt && b.metadata?.yandex);
+        const states: Partial<Record<YandexPartKey, YandexPartAvailability>> = {};
+        if (nextInfo.book) {
+          const local = await computeEbookPartState(appService, index, nextInfo.book.uuid);
+          const synced = yandexBooks.some((b) => b.metadata?.yandex?.uuid === nextInfo.book!.uuid);
+          states.book = local === 'downloaded' || synced ? 'downloaded' : 'not-downloaded';
+        }
+        if (nextInfo.audiobook) {
+          const reduced = buildChapters(nextInfo.audiobook.tracks).map(
+            ({ title, durationSec }) => ({ title, durationSec }),
+          );
+          const manifestHash = getAudiobookManifestHash(reduced);
+          const local = await computeAudiobookPartState(appService, index, reduced);
+          // Attached: the ebook row carries the audiobookHash stamp.
+          // Standalone: the audiobook's own row carries the uuid stamp.
+          const synced = yandexBooks.some(
+            (b) =>
+              b.metadata?.yandex?.audiobookHash === manifestHash ||
+              (b.hash === manifestHash && b.metadata?.yandex?.uuid === nextInfo.uuid),
+          );
+          states.audiobook = local === 'downloaded' || synced ? 'downloaded' : 'not-downloaded';
+        }
+        setPartStates(states);
       }
     } catch (e) {
       setError(e instanceof Error ? _(e.message) : _('Could not fetch this book'));
@@ -302,12 +325,54 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
   };
 
   /**
+   * Combined ebook + attached-audiobook spec for the server target: one job
+   * row; the server downloads the ebook, computes its hash, then attaches
+   * the chapters under it. File paths are derived server-side.
+   */
+  const buildFullSpec = (): YandexJobSpec => {
+    const book = info!.book!;
+    const { tracks } = info!.audiobook!;
+    const chapters = buildChapters(tracks);
+    const hash = getAudiobookManifestHash(
+      chapters.map(({ title, durationSec }) => ({ title, durationSec })),
+    );
+    return {
+      id: `${info!.uuid}::full`,
+      resourceType: 'book',
+      title: book.info.title,
+      author: getAuthors(book.info),
+      coverUrl: book.info.cover?.large ?? '',
+      files: [
+        {
+          name: `${book.uuid}.epub`,
+          url: `${YANDEX_API_BASE}/books/${book.uuid}/content/v4`,
+          path: `${book.uuid}.epub`,
+          base: 'Cache',
+        },
+        ...tracks.map((track, index) => ({
+          name: `chapter_${String(index + 1).padStart(3, '0')}.m4a`,
+          url: getChapterUrl(track)!,
+          // Server-side paths are derived from the hash fields.
+          path: '',
+          base: 'Books' as const,
+        })),
+      ],
+      audiobook: { hash, chapters },
+    };
+  };
+
+  /**
    * Download the ebook first, then chain the audiobook onto the imported
    * book — both formats end up as a single library entry. The dialog stays
-   * open and shows the per-part progress.
+   * open and shows the per-part progress. On the server target a single
+   * combined job is submitted instead (the server chains internally).
    */
   const startFullDownload = async () => {
     if (!info?.book || !info?.audiobook) return;
+    if (downloadTarget === 'server') {
+      await startDownload(buildFullSpec(), { target: 'server' });
+      return;
+    }
     await startDownload(buildEbookSpec(), {
       target: downloadTarget,
       onBookImported: (book) => {
@@ -316,15 +381,37 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
     });
   };
 
-  // A part's live state: an active/kept job row overrides the availability
-  // snapshot taken at search time (a completed job means the files are local).
+  // A part's live state: an active/kept job row (local session or server)
+  // overrides the availability snapshot taken at search time.
   const findPartJob = (part: YandexPartKey): YandexDownloadJob | undefined => {
     if (!info) return undefined;
-    if (part === 'book') return jobs.find((job) => job.id === info.book?.uuid);
-    return jobs.find(
-      (job) =>
-        job.id === `${info.uuid}::audiobook` || job.id === `${info.uuid}::attached-audiobook`,
+    const ids =
+      part === 'book'
+        ? [info.book?.uuid, `${info.uuid}::full`]
+        : [`${info.uuid}::audiobook`, `${info.uuid}::attached-audiobook`, `${info.uuid}::full`];
+    return (
+      jobs.find((job) => ids.includes(job.id)) ?? serverJobs.find((job) => ids.includes(job.id))
     );
+  };
+
+  /** Whether the job row belongs to the server (controls route by API). */
+  const isServerJob = (id: string): boolean => !jobs.some((job) => job.id === id);
+
+  const jobPause = (job: YandexDownloadJob) => {
+    if (isServerJob(job.id)) void pauseServerJob(job.id);
+    else yandexDownloadsManager.pauseJob(job.id);
+  };
+  const jobResume = (job: YandexDownloadJob) => {
+    if (isServerJob(job.id)) void resumeServerJob(job.id);
+    else yandexDownloadsManager.resumeJob(job.id);
+  };
+  const jobCancel = (job: YandexDownloadJob) => {
+    if (isServerJob(job.id)) void cancelServerJob(job.id);
+    else void yandexDownloadsManager.cancelJob(job.id);
+  };
+  const jobDismiss = (job: YandexDownloadJob) => {
+    if (isServerJob(job.id)) void dismissServerJob(job.id);
+    else useYandexDownloadsStore.getState().removeJob(job.id);
   };
 
   const partState = (part: YandexPartKey): YandexPartState => {
@@ -360,6 +447,10 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
   ) => {
     const state = partState(part);
     const job = findPartJob(part);
+    // A combined full download covers both parts; the book cell renders the
+    // single (full-width) progress row, so the audiobook cell stays empty —
+    // otherwise the same job appears twice.
+    if (part === 'audiobook' && info && job?.id === `${info.uuid}::full`) return null;
     if (state === 'downloaded') {
       return (
         <button type='button' className='btn btn-contrast btn-sm' disabled>
@@ -392,7 +483,7 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
               type='button'
               className='btn btn-ghost btn-sm btn-circle'
               aria-label={_('Pause')}
-              onClick={() => yandexDownloadsManager.pauseJob(job.id)}
+              onClick={() => jobPause(job)}
             >
               <MdPause className='h-4 w-4' />
             </button>
@@ -402,7 +493,7 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
               type='button'
               className='btn btn-ghost btn-sm btn-circle'
               aria-label={_('Resume')}
-              onClick={() => yandexDownloadsManager.resumeJob(job.id)}
+              onClick={() => jobResume(job)}
             >
               <MdPlayArrow className='h-4 w-4' />
             </button>
@@ -411,7 +502,7 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
             type='button'
             className='btn btn-ghost btn-sm btn-circle'
             aria-label={_('Cancel')}
-            onClick={() => void yandexDownloadsManager.cancelJob(job.id)}
+            onClick={() => jobCancel(job)}
           >
             <MdClose className='h-4 w-4' />
           </button>
@@ -426,7 +517,7 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
             type='button'
             className='btn btn-ghost btn-sm btn-circle'
             aria-label={_('Retry')}
-            onClick={() => yandexDownloadsManager.resumeJob(job.id)}
+            onClick={() => jobResume(job)}
           >
             <MdRefresh className='h-4 w-4' />
           </button>
@@ -434,7 +525,7 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
             type='button'
             className='btn btn-ghost btn-sm btn-circle'
             aria-label={_('Dismiss')}
-            onClick={() => useYandexDownloadsStore.getState().removeJob(job.id)}
+            onClick={() => jobDismiss(job)}
           >
             <MdClose className='h-4 w-4' />
           </button>

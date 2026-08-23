@@ -113,6 +113,45 @@ docker compose exec db psql -U supabase_admin -c \
   "INSERT INTO readest_meta.migrations (name) VALUES ('002_add_book_shares.sql') ON CONFLICT DO NOTHING"
 ```
 
+### Server-side Yandex downloads
+
+`YANDEX_SERVER_DOWNLOADS=1` (default in `compose.yaml`) lets clients hand
+Yandex book/audiobook downloads to the server: the client submits a job to
+`/api/yandex/jobs` and the server streams the files into object storage in
+the background, so downloads survive client refreshes and restarts. Job
+state lives in the `yandex_jobs` table (migration 019) and is polled by the
+client.
+
+The jobs run **in-process** — keep the client service **single-instance**
+(one container, no replicas / no multi-worker PM2). If the container
+restarts mid-download, the job is swept to `paused` and can be resumed from
+the client with a fresh Yandex token. This feature is not available on
+serverless deployments (Cloudflare); there the API responds with 501.
+
+### Server-side shared library
+
+`SHARED_LIBRARY=true` (default in `compose.yaml`) turns the server into a
+shared library: every book whose files live on the server — client uploads
+to the cloud and server-side Yandex downloads alike — appears in the library
+of **every authenticated user**. Everything else stays per-user: reading
+position, audiobook playback position, notes, reading status, and metadata
+edits never cross accounts. Set `SHARED_LIBRARY=false` in `docker/.env` to
+restore the uploader-only library.
+
+Ownership rules:
+
+- Only the **uploader** can delete a book's files from the server; everyone
+  else can only remove the book from their own library, and it stays
+  removed (the server prefers the user's own row over the shared one).
+- When the owner deletes the files, the book disappears for everyone.
+- Storage usage counts toward the owner's quota; downloading a shared book
+  costs other users nothing.
+
+Migration 020 adds the `books.shared` flag. The first sync request after a
+startup or a mode change sweeps the flag into line (backfilling existing
+books whose files are on the server), so no rebuild or re-upload is needed
+after changing the setting.
+
 ### Hot Reload (development)
 
 > **Prerequisites**: submodules must be initialized (see above).
@@ -187,6 +226,13 @@ the stack. two things it gets right that are easy to miss: the `Host` header has
 to reach minio unchanged or the presigned signatures will not verify, and the
 request body limit has to be lifted on the bucket location or large book uploads
 are truncated.
+
+Audiobook streaming fetches chapter audio straight from `S3_PUBLIC_ENDPOINT`.
+Keep the scheme consistent: a web client served over https cannot reach an
+http-only bucket (browser mixed-content block, and there is no client-side
+workaround) — either terminate TLS in front of minio or serve the web app over
+http on the LAN. Tauri clients (PC/iOS/Android) allow cleartext http to local
+hosts out of the box.
 
 ### CJK fonts on a custom domain
 

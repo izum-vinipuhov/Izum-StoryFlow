@@ -227,7 +227,45 @@ describe('YandexImportDialog', () => {
     expect(spec.files[0]!.url).toContain('/books/LZRQId0e/content/v4');
   });
 
-  it('downloads fully: chains the audiobook onto the imported ebook', async () => {
+  it('downloads fully to the server: submits one combined job', async () => {
+    clientMocks.fetchBookInfo.mockResolvedValue({
+      title: 'Последнее желание',
+      cover: { large: 'https://covers/book.jpeg' },
+      authors: [{ name: 'Анджей Сапковский' }],
+    });
+    clientMocks.fetchAudiobookInfo.mockResolvedValue({
+      title: 'Ведьмак',
+      duration: 100,
+      cover: { large: 'https://covers/audiobook.jpeg' },
+      authors: [{ name: 'Анджей Сапковский' }],
+    });
+    clientMocks.fetchTracks.mockResolvedValue([
+      {
+        number: 1,
+        duration: { seconds: 2120 },
+        offline: { max_bit_rate: { url: 'https://cdn/1.m3u8' } },
+      },
+    ]);
+
+    render(<YandexImportDialog isOpen onClose={vi.fn()} />);
+    await search('https://books.yandex.ru/books/Abc123');
+    fireEvent.click(await screen.findByRole('button', { name: 'Download Fully' }));
+
+    await waitFor(() => expect(startDownloadMock).toHaveBeenCalledTimes(1));
+    const [spec, opts] = startDownloadMock.mock.calls[0]!;
+    expect(opts).toMatchObject({ target: 'server' });
+    expect(spec.id).toBe('Abc123::full');
+    expect(spec.resourceType).toBe('book');
+    // One epub file + one chapter file, with the audiobook part attached.
+    expect(spec.files).toHaveLength(2);
+    expect(spec.files[0]!.url).toContain('/books/Abc123/content/v4');
+    expect(spec.files[1]!.url).toBe('https://cdn/1.m4a');
+    expect(spec.audiobook.hash).toBeTruthy();
+    expect(spec.audiobook.chapters).toHaveLength(1);
+  });
+
+  it('downloads fully locally: chains the audiobook onto the imported ebook', async () => {
+    canDownloadToServerMock.mockReturnValue(false);
     clientMocks.fetchBookInfo.mockResolvedValue({
       title: 'Последнее желание',
       cover: { large: 'https://covers/book.jpeg' },
@@ -453,6 +491,27 @@ describe('YandexImportDialog', () => {
     expect(screen.queryByRole('button', { name: 'Download Fully' })).toBeNull();
   });
 
+  it('shows a server-downloaded book as downloaded via the synced metadata stamp', async () => {
+    // No local files, no import index entry — only the synced library row
+    // carries the Yandex stamp (what the server wrote on download).
+    const book = {
+      ...bookRow('h1'),
+      metadata: { title: 'Книга', author: '', language: 'und', yandex: { uuid: 'Abc123' } },
+    };
+    useLibraryStore.getState().setLibrary([book as Book]);
+    appServiceMocks.isBookAvailable.mockResolvedValue(false);
+    clientMocks.fetchBookInfo.mockResolvedValue(bookInfo);
+    clientMocks.fetchAudiobookInfo.mockRejectedValue(new Error('Audiobook not found'));
+
+    render(<YandexImportDialog isOpen onClose={vi.fn()} />);
+    await search('https://books.yandex.ru/books/Abc123');
+
+    // With nothing left to download the part buttons disappear entirely.
+    expect(await screen.findByText('Книга')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Book' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Download Fully' })).toBeNull();
+  });
+
   it('shows live progress with pause and cancel for a running job on search', async () => {
     useYandexDownloadsStore.getState().addJob({
       id: 'Abc123',
@@ -483,5 +542,32 @@ describe('YandexImportDialog', () => {
     // The progress block's cancel comes before the dialog's own Cancel button.
     fireEvent.click(screen.getAllByRole('button', { name: 'Cancel' })[0]!);
     expect(cancelSpy).toHaveBeenCalledWith('Abc123');
+  });
+
+  it('shows one progress row for a combined full download, not two', async () => {
+    useYandexDownloadsStore.getState().addJob({
+      id: 'Abc123::full',
+      resourceType: 'book',
+      title: 'Ведьмак',
+      author: '',
+      coverUrl: '',
+      status: 'downloading',
+      totalBytes: 100,
+      downloadedBytes: 50,
+      createdAt: 0,
+      files: [],
+    });
+    clientMocks.fetchBookInfo.mockResolvedValue(bookInfo);
+    clientMocks.fetchAudiobookInfo.mockResolvedValue(audiobookInfo);
+    clientMocks.fetchTracks.mockResolvedValue(tracks);
+
+    render(<YandexImportDialog isOpen onClose={vi.fn()} />);
+    await search('https://books.yandex.ru/books/Abc123');
+
+    // The combined job covers both parts — a single progress row renders.
+    expect(await screen.findByRole('button', { name: 'Pause' })).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: 'Pause' })).toHaveLength(1);
+    expect(screen.queryByRole('button', { name: 'Book' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Audiobook' })).toBeNull();
   });
 });
