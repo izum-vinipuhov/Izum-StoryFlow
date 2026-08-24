@@ -763,7 +763,7 @@ const Bookshelf: React.FC<BookshelfProps> = ({
     const books = downloadableBooks;
     if (books.length === 0) return;
     handleSetSelectMode(false);
-    // One summary up front rather than a toast per book: the Readest Cloud
+    // One summary up front rather than a toast per book: the Izum StoryFlow Cloud
     // path returns as soon as each book is queued, but a file backend
     // actually fetches them, and either way the user needs immediate feedback
     // that the batch started.

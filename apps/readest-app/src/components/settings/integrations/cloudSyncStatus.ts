@@ -11,7 +11,7 @@ export interface ReadestRowInputs {
   signedIn: boolean;
   /** Plan still resolving from the JWT (signed-in only). */
   planLoading: boolean;
-  /** Readest Cloud syncs the library on this device. */
+  /** Izum StoryFlow Cloud syncs the library on this device. */
   enabled: boolean;
 }
 
@@ -33,7 +33,7 @@ export interface ThirdPartyRowInputs {
   syncBooks: boolean;
   /**
    * Some OTHER enabled provider takes the book files (another backend with
-   * syncBooks on, or Readest Cloud). Providers are no longer exclusive (#5062),
+   * syncBooks on, or Izum StoryFlow Cloud). Providers are no longer exclusive (#5062),
    * so "this one does not upload book files" is only alarming when nothing else
    * does.
    */

@@ -1,10 +1,10 @@
-// Per-device Send to Readest preferences, stored in localStorage (not synced
+// Per-device Send to Izum StoryFlow preferences, stored in localStorage (not synced
 // across devices).
 
 const DRAIN_ENABLED_KEY = 'readest-send-drain-enabled';
 
 /**
- * Whether this device should drain the Send to Readest inbox — download,
+ * Whether this device should drain the Send to Izum StoryFlow inbox — download,
  * convert, and import items emailed to the user's address. Defaults to true;
  * a user with several devices can turn it off on the ones that should not do
  * the work.

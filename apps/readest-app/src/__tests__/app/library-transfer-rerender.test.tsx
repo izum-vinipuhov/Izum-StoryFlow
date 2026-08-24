@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { useTransferStore, type TransferItem } from '@/store/transferStore';
 
 // Regression guard for issue #5047 ("Entire app freezes when uploading large
-// files to Readest Cloud"). The library page reads a single boolean
+// files to Izum StoryFlow Cloud"). The library page reads a single boolean
 // (`isTransferQueueOpen`) from the transfer store. During a bulk upload the
 // store churns ~10 progress writes/sec per active transfer, so if the page
 // subscribes to the WHOLE store (`const { isTransferQueueOpen } =

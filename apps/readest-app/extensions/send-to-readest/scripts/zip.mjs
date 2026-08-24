@@ -25,7 +25,7 @@ if (!existsSync(MANIFEST)) {
 }
 
 const { version } = JSON.parse(readFileSync(MANIFEST, 'utf8'));
-const out = join(ROOT, `send-to-readest-${version}.zip`);
+const out = join(ROOT, `send-to-izum-story-flow-${version}.zip`);
 if (existsSync(out)) rmSync(out);
 
 // Zip the *contents* of dist/ (cwd: DIST) so manifest.json lands at the
@@ -36,4 +36,4 @@ execFileSync('zip', ['-rq', out, '.', '-x', '*.DS_Store', '*.LICENSE.txt'], {
 });
 
 const kb = Math.round(statSync(out).size / 1024);
-console.log(`[zip] send-to-readest-${version}.zip (${kb} KB) ready to upload`);
+console.log(`[zip] send-to-izum-story-flow-${version}.zip (${kb} KB) ready to upload`);

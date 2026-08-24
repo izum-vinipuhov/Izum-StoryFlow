@@ -26,7 +26,7 @@ interface SendItem {
 }
 
 /**
- * The Send to Readest web page. Being a Readest client itself, it runs the
+ * The Send to Izum StoryFlow web page. Being a Readest client itself, it runs the
  * shared import pipeline directly (no inbox round-trip): drop a file or paste
  * an article URL and it lands in the cloud library, syncing to every device.
  */
@@ -117,7 +117,7 @@ export default function SendPage() {
   if (!user) {
     return (
       <div className='mx-auto flex max-w-[560px] flex-col items-center px-4 py-16 text-center'>
-        <h1 className='text-xl font-semibold'>{_('Send to Readest')}</h1>
+        <h1 className='text-xl font-semibold'>{_('Send to Izum StoryFlow')}</h1>
         <p className='text-base-content/70 mt-2 text-sm'>
           {_('Sign in to send books and articles to your library.')}
         </p>
@@ -128,7 +128,7 @@ export default function SendPage() {
   return (
     <div className='mx-auto flex max-w-[560px] flex-col gap-6 px-4 py-10'>
       <header>
-        <h1 className='text-xl font-semibold tracking-tight'>{_('Send to Readest')}</h1>
+        <h1 className='text-xl font-semibold tracking-tight'>{_('Send to Izum StoryFlow')}</h1>
         <p className='text-base-content/70 mt-1 text-sm'>
           {_('Drop a book or document, or paste an article link. It syncs to all your devices.')}
         </p>
@@ -195,7 +195,7 @@ export default function SendPage() {
           </div>
           <p className='text-base-content/70 text-xs leading-relaxed'>
             {_(
-              'Install the Send to Readest browser extension to send the article you are reading to your library. It clips the page from your browser so paywalled and login-only sites still work.',
+              'Install the Send to Izum StoryFlow browser extension to send the article you are reading to your library. It clips the page from your browser so paywalled and login-only sites still work.',
             )}
           </p>
         </section>

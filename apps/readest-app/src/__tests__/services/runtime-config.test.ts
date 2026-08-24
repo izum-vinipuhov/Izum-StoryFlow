@@ -8,10 +8,10 @@ import {
 } from '@/services/runtimeConfig';
 
 const stored = {
-  serverUrl: 'http://192.168.0.55:10000',
+  serverUrl: 'http://192.0.2.1:10000',
   config: {
-    apiBaseUrl: 'http://192.168.0.55:10000',
-    supabaseUrl: 'http://192.168.0.55:10001',
+    apiBaseUrl: 'http://192.0.2.1:10000',
+    supabaseUrl: 'http://192.0.2.1:10001',
     premiumEnabled: true,
   },
 };

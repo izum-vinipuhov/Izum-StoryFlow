@@ -108,7 +108,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   localStorage.clear();
   // Book uploads are gated on the selected cloud sync provider and
-  // deferred until settings hydrate; hydrate with Readest Cloud selected
+  // deferred until settings hydrate; hydrate with Izum StoryFlow Cloud selected
   // so the pre-gating behavior under test is preserved.
   useSettingsStore.setState({
     settings: {

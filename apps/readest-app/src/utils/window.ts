@@ -4,10 +4,10 @@ import { exit } from '@tauri-apps/plugin-process';
 import { type as osType } from '@tauri-apps/plugin-os';
 import { eventDispatcher } from './event';
 
-const APP_NAME = 'Readest';
+const APP_NAME = 'Izum StoryFlow';
 
 /**
- * The OS window title, e.g. `Readest - The Hobbit`. It is never drawn in the
+ * The OS window title, e.g. `Izum StoryFlow - The Hobbit`. It is never drawn in the
  * UI — desktop windows are either decorationless (Windows/Linux) or hide their
  * title text (the macOS overlay title bar) — but window switchers and screen
  * readers announce it, so it has to name the open book to tell windows apart.

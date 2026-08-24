@@ -1,14 +1,14 @@
 {
   "app_name": {
-    "message": "Send to Readest",
+    "message": "Send to Izum StoryFlow",
     "description": "Extension name shown in the browser toolbar and the Chrome Web Store listing."
   },
   "app_description": {
-    "message": "Save web pages to your Readest library",
+    "message": "Save web pages to your Izum StoryFlow library",
     "description": "Short description shown in the Chrome Web Store listing."
   },
   "action_title": {
-    "message": "Send to Readest",
+    "message": "Send to Izum StoryFlow",
     "description": "Tooltip on the toolbar action button."
   }
 }

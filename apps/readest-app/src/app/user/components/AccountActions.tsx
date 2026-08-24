@@ -78,7 +78,7 @@ const AccountActions: React.FC<AccountActionsProps> = ({
     books: {
       title: _('Delete All Books?'),
       message: _(
-        'This action cannot be undone. Every book will be removed from this device and from your Readest cloud library, along with reading progress, bookmarks, and annotations. Books you imported in place keep their original files, and books uploaded to cloud storage stay there until you remove them under Manage Storage. Other signed-in devices keep their own copies.',
+        'This action cannot be undone. Every book will be removed from this device and from your Izum StoryFlow cloud library, along with reading progress, bookmarks, and annotations. Books you imported in place keep their original files, and books uploaded to cloud storage stay there until you remove them under Manage Storage. Other signed-in devices keep their own copies.',
       ),
       onConfirm: onConfirmDeleteAllBooks,
     },

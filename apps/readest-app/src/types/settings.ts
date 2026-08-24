@@ -282,10 +282,10 @@ export interface ICloudSettings {
 }
 
 /**
- * Readest Cloud's own library-sync switch. Readest Cloud used to be the
+ * Izum StoryFlow Cloud's own library-sync switch. Izum StoryFlow Cloud used to be the
  * derived fallback — "on" whenever no third-party provider was enabled —
  * because exactly one provider could own the library channels. Providers are
- * now independently selectable (#5062), so Readest Cloud needs a flag of its
+ * now independently selectable (#5062), so Izum StoryFlow Cloud needs a flag of its
  * own.
  *
  * `enabled` is DELIBERATELY optional with no default (this slice must never
@@ -299,7 +299,7 @@ export interface ICloudSettings {
 export interface ReadestCloudSettings {
   enabled?: boolean;
   /**
-   * Device-local wall-clock millis of when this device turned Readest Cloud
+   * Device-local wall-clock millis of when this device turned Izum StoryFlow Cloud
    * off. Anchors the mixed-fleet probe: a native /api/sync row newer than this
    * means another device is still writing the channels this one stopped
    * writing. Excluded from cross-device restore.
@@ -386,7 +386,7 @@ export interface SystemSettings {
   /**
    * Absolute paths of the external library folders the user has opted into
    * auto-import for. On library open and whenever the app regains focus,
-   * Readest re-scans each of these and imports any newly-added book files.
+   * Izum StoryFlow re-scans each of these and imports any newly-added book files.
    * A subset of {@link externalLibraryFolders} (auto-import requires the
    * folder to be read in place). Set per-folder from the Import-from-Folder
    * dialog. Desktop + Android only. Device-local (paths are meaningful only

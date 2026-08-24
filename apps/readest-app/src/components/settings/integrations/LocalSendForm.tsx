@@ -69,7 +69,7 @@ const LocalSendForm: React.FC<LocalSendFormProps> = ({ onBack }) => {
         parentLabel={_('Integrations')}
         currentLabel={_('LocalSend')}
         description={_(
-          'Send and receive books with LocalSend apps and other Readest devices on your local network.',
+          'Send and receive books with LocalSend apps and other Izum StoryFlow devices on your local network.',
         )}
         onBack={onBack}
       />

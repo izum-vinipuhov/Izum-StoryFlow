@@ -137,13 +137,13 @@ export const pullTTSPacks = async (
 };
 
 // The provider pack sync rides: the user's SELECTED third-party file-sync
-// backend, honoring the pause gate (#4959). Readest Cloud is deliberately
+// backend, honoring the pause gate (#4959). Izum StoryFlow Cloud is deliberately
 // excluded — packs live on the user's own storage only.
 export const getActiveTTSPackSyncProvider = async (): Promise<FileSyncProvider | null> => {
   try {
     const settings = useSettingsStore.getState().settings;
     const gate = resolveCloudSyncGate(settings);
-    // Third-party backends only (Readest Cloud is excluded from packs) and
+    // Third-party backends only (Izum StoryFlow Cloud is excluded from packs) and
     // never while the plan has them paused (#4959). Use the highest-priority
     // enabled backend, matching the fixed webdav/gdrive/s3/onedrive order.
     const backend = gate.paused ? undefined : gate.backends[0];

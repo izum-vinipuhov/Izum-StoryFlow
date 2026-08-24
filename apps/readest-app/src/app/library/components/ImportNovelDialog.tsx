@@ -142,7 +142,7 @@ const ImportNovelDialog: React.FC<ImportNovelDialogProps> = ({ isOpen, onClose, 
           <>
             <p className='text-base-content/60 text-sm leading-relaxed'>
               {_(
-                'Paste the link to a web novel’s chapter list. Readest downloads the chapters and saves them as a book.',
+                'Paste the link to a web novel’s chapter list. Izum StoryFlow downloads the chapters and saves them as a book.',
               )}
             </p>
             <input

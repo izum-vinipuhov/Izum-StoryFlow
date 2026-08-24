@@ -46,7 +46,7 @@ function getDeviceId(): string {
 }
 
 /**
- * Background controller that drains the Send to Readest inbox. Mounted once in
+ * Background controller that drains the Send to Izum StoryFlow inbox. Mounted once in
  * the library/app shell — runs on app focus and on a 60s interval whenever a
  * user is signed in. Not part of useBooksSync: this does network downloads and
  * CPU-bound conversion that must stay off the throttled cover-sync path.

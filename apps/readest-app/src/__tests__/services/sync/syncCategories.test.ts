@@ -193,7 +193,7 @@ describe('isSyncCategoryEnabled', () => {
   });
 
   describe('provider gating with multiple providers', () => {
-    test('native book channels stay on when Readest Cloud runs alongside Drive', () => {
+    test('native book channels stay on when Izum StoryFlow Cloud runs alongside Drive', () => {
       setSettings({
         readestCloud: { enabled: true },
         googleDrive: { enabled: true },
@@ -203,7 +203,7 @@ describe('isSyncCategoryEnabled', () => {
       expect(isSyncCategoryEnabled('note')).toBe(true);
     });
 
-    test('native book channels gate off when Readest Cloud is unchecked', () => {
+    test('native book channels gate off when Izum StoryFlow Cloud is unchecked', () => {
       setSettings({
         readestCloud: { enabled: false },
         googleDrive: { enabled: true },

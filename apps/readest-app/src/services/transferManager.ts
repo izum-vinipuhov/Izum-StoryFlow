@@ -69,7 +69,7 @@ class TransferManager {
   }
 
   /**
-   * Cancel pending book uploads when Readest Cloud is not the selected
+   * Cancel pending book uploads when Izum StoryFlow Cloud is not the selected
    * provider. Idempotent (acts on pending rows only) — safe to run on
    * every processQueue pass, which also re-settles rows another window
    * or a rogue retry re-pended. Cancellation is visible ('cancelled'
@@ -88,7 +88,7 @@ class TransferManager {
       store.setTransferStatus(t.id, 'cancelled', undefined, 'policy');
     });
     console.info(
-      `[cloudSync] cancelled ${gated.length} pending Readest Cloud upload(s): third-party provider selected`,
+      `[cloudSync] cancelled ${gated.length} pending Izum StoryFlow Cloud upload(s): third-party provider selected`,
     );
     this.persistQueue();
   }
@@ -149,7 +149,7 @@ class TransferManager {
       return null;
     }
 
-    // Readest Cloud storage is not written to while a third-party
+    // Izum StoryFlow Cloud storage is not written to while a third-party
     // provider is selected. Before settings hydrate the entry is queued
     // and deferred; the reconcile on hydration decides its fate.
     if (this.isSettingsLoaded() && !this.isBookUploadAllowed()) {

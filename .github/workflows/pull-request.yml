@@ -61,11 +61,11 @@ jobs:
       - name: Clippy Check
         if: steps.changes.outputs.tauri == 'true'
         working-directory: apps/readest-app/src-tauri
-        run: cargo clippy -p Readest --no-deps -- -D warnings
+        run: cargo clippy -p IzumStoryFlow --no-deps -- -D warnings
       - name: Unit tests
         if: steps.changes.outputs.tauri == 'true'
         working-directory: apps/readest-app/src-tauri
-        run: cargo test -p Readest --lib
+        run: cargo test -p IzumStoryFlow --lib
 
   # apps/readest.koplugin/native/localsend-bin is a standalone Cargo crate
   # (not part of the src-tauri workspace), built into the koplugin's release

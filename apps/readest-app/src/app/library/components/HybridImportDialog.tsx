@@ -307,7 +307,7 @@ const HybridImportDialog: React.FC<HybridImportDialogProps> = ({ isOpen, onClose
           />
           {!canDownloadToServer && (
             <p className='text-base-content/50 text-xs'>
-              {_('Log in and enable Readest Cloud to upload to server')}
+              {_('Log in and enable Izum StoryFlow Cloud to upload to server')}
             </p>
           )}
         </div>

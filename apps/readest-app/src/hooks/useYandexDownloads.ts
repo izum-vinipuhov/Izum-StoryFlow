@@ -55,7 +55,7 @@ const startServerDownload = async (spec: YandexJobSpec): Promise<void> => {
  * Bridges the Yandex downloads manager to the library stores: starts a job
  * with the current settings snapshot and merges imported books the same way
  * the OPDS auto-download path does (dedupe by hash, save immediately, then
- * queue the cloud upload when Readest Cloud storage is active and the target
+ * queue the cloud upload when Izum StoryFlow Cloud storage is active and the target
  * is the server).
  */
 export function useYandexDownloads() {

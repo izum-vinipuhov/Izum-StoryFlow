@@ -137,7 +137,7 @@ describe('isReadestCloudStorageActive', () => {
     expect(isReadestCloudStorageActive(settings)).toBe(false);
   });
 
-  test('false while paused: uploads must not silently resume to Readest Cloud', () => {
+  test('false while paused: uploads must not silently resume to Izum StoryFlow Cloud', () => {
     vi.mocked(isCloudSyncAllowed).mockReturnValue(false);
     const settings = makeSettings({ googleDrive: { enabled: true } } as Partial<SystemSettings>);
     expect(isReadestCloudStorageActive(settings, 'free')).toBe(false);
@@ -159,7 +159,7 @@ describe('cloudProviderDisplayName', () => {
     expect(cloudProviderDisplayName('gdrive')).toBe('Google Drive');
     expect(cloudProviderDisplayName('s3')).toBe('S3');
     expect(cloudProviderDisplayName('onedrive')).toBe('OneDrive');
-    expect(cloudProviderDisplayName('readest')).toBe('Readest Cloud');
+    expect(cloudProviderDisplayName('readest')).toBe('Izum StoryFlow Cloud');
   });
 });
 
@@ -191,11 +191,11 @@ describe('getEnabledFileSyncBackends', () => {
 });
 
 describe('isReadestCloudEnabled (derived default)', () => {
-  test('absent field with no third-party enabled means Readest Cloud is on', () => {
+  test('absent field with no third-party enabled means Izum StoryFlow Cloud is on', () => {
     expect(isReadestCloudEnabled(s({}))).toBe(true);
   });
 
-  test('absent field with a third-party enabled means Readest Cloud is off (legacy exclusive)', () => {
+  test('absent field with a third-party enabled means Izum StoryFlow Cloud is off (legacy exclusive)', () => {
     expect(isReadestCloudEnabled(s({ googleDrive: { enabled: true } as never }))).toBe(false);
   });
 
@@ -249,7 +249,7 @@ describe('resolveCloudSyncGate (readest + backends together)', () => {
       webdav: { enabled: true } as never,
     });
     const gate = resolveCloudSyncGate(settings, 'free');
-    // Readest Cloud keeps running because the user asked for it, not as a fallback.
+    // Izum StoryFlow Cloud keeps running because the user asked for it, not as a fallback.
     expect(gate.readest).toBe(true);
     expect(gate.backends).toEqual(['webdav', 'gdrive']);
     expect(gate.paused).toBe(true);
@@ -258,7 +258,7 @@ describe('resolveCloudSyncGate (readest + backends together)', () => {
 });
 
 describe('isReadestCloudStorageActive (follows the flag, not exclusivity)', () => {
-  test('follows the Readest Cloud flag, not the absence of third-party providers', () => {
+  test('follows the Izum StoryFlow Cloud flag, not the absence of third-party providers', () => {
     const both = s({ readestCloud: { enabled: true }, webdav: { enabled: true } as never });
     expect(isReadestCloudStorageActive(both)).toBe(true);
     const off = s({ readestCloud: { enabled: false }, webdav: { enabled: true } as never });
@@ -268,7 +268,9 @@ describe('isReadestCloudStorageActive (follows the flag, not exclusivity)', () =
 
 describe('cloudProvidersDisplayName', () => {
   test('joins provider names for the "synced via" copy', () => {
-    expect(cloudProvidersDisplayName(['readest', 'gdrive'])).toBe('Readest Cloud, Google Drive');
+    expect(cloudProvidersDisplayName(['readest', 'gdrive'])).toBe(
+      'Izum StoryFlow Cloud, Google Drive',
+    );
   });
 });
 

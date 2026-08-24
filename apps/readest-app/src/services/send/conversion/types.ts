@@ -1,4 +1,4 @@
-/** MIME types that Send to Readest converts to EPUB before import. */
+/** MIME types that Send to Izum StoryFlow converts to EPUB before import. */
 export type ConvertibleMime =
   | 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' // .docx
   | 'application/rtf'

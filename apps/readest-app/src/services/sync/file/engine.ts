@@ -632,7 +632,7 @@ export class FileSyncEngine {
           knownNoSource.get(book.hash) !== (book.updatedAt ?? 0)));
 
     // A book whose FILE is on the remote is cloud-backed, exactly like a book in
-    // Readest Cloud storage — and `book.uploadedAt` is the only thing the rest of
+    // Izum StoryFlow Cloud storage — and `book.uploadedAt` is the only thing the rest of
     // the app reads to know that. Leaving it null for a provider-synced book made
     // the whole library misread it as purely-local: it could never be re-downloaded
     // (`makeBookAvailable` gates on `uploadedAt`), the shelf offered Upload instead

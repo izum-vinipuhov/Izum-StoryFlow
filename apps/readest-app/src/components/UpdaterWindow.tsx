@@ -328,7 +328,7 @@ export const UpdaterContent = ({
           return;
         }
         // Windows-portable / Linux-AppImage / Android: download, verify, install.
-        const fileName = n.url.split('/').pop() || `Readest_${n.version}`;
+        const fileName = n.url.split('/').pop() || `IzumStoryFlow_${n.version}`;
         let filePath: string;
         if (n.platformKey.includes('portable')) {
           // Windows portable: write into the executable dir so the new exe

@@ -180,20 +180,20 @@ describe('tauriHandleToggleFullScreen', () => {
 
 describe('formatAppWindowTitle', () => {
   test('names the open book so windows are distinguishable in Alt+Tab', () => {
-    expect(formatAppWindowTitle('The Hobbit')).toBe('Readest - The Hobbit');
+    expect(formatAppWindowTitle('The Hobbit')).toBe('Izum StoryFlow - The Hobbit');
   });
 
   test('falls back to the app name when no book is open', () => {
-    expect(formatAppWindowTitle()).toBe('Readest');
-    expect(formatAppWindowTitle('')).toBe('Readest');
+    expect(formatAppWindowTitle()).toBe('Izum StoryFlow');
+    expect(formatAppWindowTitle('')).toBe('Izum StoryFlow');
   });
 
   test('ignores a blank book title', () => {
-    expect(formatAppWindowTitle('   ')).toBe('Readest');
+    expect(formatAppWindowTitle('   ')).toBe('Izum StoryFlow');
   });
 
   test('trims the book title', () => {
-    expect(formatAppWindowTitle('  The Hobbit \n')).toBe('Readest - The Hobbit');
+    expect(formatAppWindowTitle('  The Hobbit \n')).toBe('Izum StoryFlow - The Hobbit');
   });
 });
 
@@ -211,7 +211,7 @@ describe('tauriSetWindowTitle', () => {
 
     await tauriSetWindowTitle('The Hobbit');
 
-    expect(win.setTitle).toHaveBeenCalledWith('Readest - The Hobbit');
+    expect(win.setTitle).toHaveBeenCalledWith('Izum StoryFlow - The Hobbit');
   });
 
   test('resets to the app name when no book is open', async () => {
@@ -219,6 +219,6 @@ describe('tauriSetWindowTitle', () => {
 
     await tauriSetWindowTitle();
 
-    expect(win.setTitle).toHaveBeenCalledWith('Readest');
+    expect(win.setTitle).toHaveBeenCalledWith('Izum StoryFlow');
   });
 });

@@ -45,7 +45,7 @@ export interface CloudSyncProviderFlags {
    * absent when the source window has never had the slice written. `enabled`
    * is itself optional because `undefined` is meaningful there (it means
    * "derive from the third-party flags") — coercing it to `false` would
-   * silently switch Readest Cloud off on the receiver.
+   * silently switch Izum StoryFlow Cloud off on the receiver.
    */
   readestCloud?: { enabled?: boolean; disabledAt?: number };
 }

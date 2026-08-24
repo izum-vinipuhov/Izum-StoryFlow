@@ -5,14 +5,14 @@ import type { Book } from '@/types/book';
 
 /**
  * Issue #5062 — cloud sync providers are independently selectable, so a user
- * can mirror the library to Readest Cloud AND a file backend (WebDAV, Google
+ * can mirror the library to Izum StoryFlow Cloud AND a file backend (WebDAV, Google
  * Drive, S3, OneDrive) at once. `pullLibrary` in useBooksSync.ts therefore has
- * four routing paths depending on which of {Readest Cloud, a file backend}
+ * four routing paths depending on which of {Izum StoryFlow Cloud, a file backend}
  * are enabled:
  *
  *   - both enabled:        the file pass runs, THEN the native pull also runs
  *   - file backend only:   the file pass runs, the native pull does not
- *   - Readest Cloud only:  the native pull runs, the file pass does not
+ *   - Izum StoryFlow Cloud only:  the native pull runs, the file pass does not
  *   - neither (not covered here; nothing runs)
  *
  * `isReadestCloudEnabled` and `getActiveFileSyncBackends` are settable per
@@ -125,7 +125,7 @@ describe('useBooksSync pullLibrary routing (issue #5062)', () => {
     expect(pullCalls.length).toBeGreaterThan(0);
   });
 
-  it('runs only the file pass when Readest Cloud is off and a file backend is on', async () => {
+  it('runs only the file pass when Izum StoryFlow Cloud is off and a file backend is on', async () => {
     routing.readestEnabled = false;
     routing.backends = ['webdav'];
 
@@ -139,7 +139,7 @@ describe('useBooksSync pullLibrary routing (issue #5062)', () => {
     expect(syncState.syncBooks).not.toHaveBeenCalled();
   });
 
-  it('runs only the native pull when Readest Cloud is on and no file backend is on', async () => {
+  it('runs only the native pull when Izum StoryFlow Cloud is on and no file backend is on', async () => {
     routing.readestEnabled = true;
     routing.backends = [];
 

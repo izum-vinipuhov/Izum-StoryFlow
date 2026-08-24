@@ -40,7 +40,7 @@ const ImportAnnotationsDialog: React.FC<ImportAnnotationsDialogProps> = ({
       >
         <NavigationRow
           icon={MdDataObject}
-          title={_('Readest')}
+          title={_('Izum StoryFlow')}
           status={_('Izum StoryFlow annotations file (.json)')}
           onClick={onImportReadest}
         />

@@ -145,7 +145,7 @@ export abstract class BaseAppService implements AppService {
   }
 
   /**
-   * Users with WebDAV/Drive already enabled had native Readest Cloud uploads
+   * Users with WebDAV/Drive already enabled had native Izum StoryFlow Cloud uploads
    * gated off when cloud sync provider selection shipped; flip syncBooks on
    * once for every enabled third-party backend so their books keep backing up
    * somewhere. This force-enables syncBooks a single time even for a user who

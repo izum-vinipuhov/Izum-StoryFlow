@@ -5,14 +5,14 @@ import type { FileSyncBackendKind } from '@/services/sync/file/providerRegistry'
 
 /**
  * The cloud sync provider kind for library data (book files, book rows,
- * progress, notes). 'readest' is the native Readest Cloud; the others are
+ * progress, notes). 'readest' is the native Izum StoryFlow Cloud; the others are
  * the third-party file-sync backends.
  *
  * Providers are INDEPENDENT (#5062): any subset may sync the library at once,
- * including none. Readest Cloud's flag has a derived default so an absent value
+ * including none. Izum StoryFlow Cloud's flag has a derived default so an absent value
  * reproduces the old exclusive behaviour; every third-party backend is a plain
  * per-device `enabled` flag. Account-level data (settings replicas, reading
- * stats, dictionaries/fonts, translations) always syncs via Readest Cloud while
+ * stats, dictionaries/fonts, translations) always syncs via Izum StoryFlow Cloud while
  * signed in, regardless of this selection.
  */
 export type CloudSyncProviderKind = 'readest' | FileSyncBackendKind;
@@ -35,7 +35,7 @@ export const cloudProviderDisplayName = (kind: CloudSyncProviderKind): string =>
           ? 'OneDrive'
           : kind === 'icloud'
             ? 'iCloud'
-            : 'Readest Cloud';
+            : 'Izum StoryFlow Cloud';
 
 /**
  * The third-party backends the user has switched on, in a STABLE order that
@@ -58,10 +58,10 @@ export const hasAnyThirdPartyEnabled = (settings: SystemSettings | null | undefi
   getEnabledFileSyncBackends(settings).length > 0;
 
 /**
- * Whether Readest Cloud syncs the library channels on this device.
+ * Whether Izum StoryFlow Cloud syncs the library channels on this device.
  *
  * The `??` is load-bearing: an absent `readestCloud.enabled` reproduces the
- * pre-#5062 exclusive derivation (Readest Cloud owned the library exactly when
+ * pre-#5062 exclusive derivation (Izum StoryFlow Cloud owned the library exactly when
  * no third-party provider was enabled), so upgrading users need no migration
  * and disconnecting the last third-party provider still falls back to Readest
  * Cloud. Once the user touches a Cloud Sync checkbox the flag is explicit and
@@ -70,7 +70,7 @@ export const hasAnyThirdPartyEnabled = (settings: SystemSettings | null | undefi
 export const isReadestCloudEnabled = (settings: SystemSettings | null | undefined): boolean =>
   settings?.readestCloud?.enabled ?? !hasAnyThirdPartyEnabled(settings);
 
-/** Every provider syncing the library on this device, Readest Cloud first. */
+/** Every provider syncing the library on this device, Izum StoryFlow Cloud first. */
 export const getCloudSyncProviders = (
   settings: SystemSettings | null | undefined,
 ): CloudSyncProviderKind[] => [
@@ -100,7 +100,7 @@ export const setCachedUserPlan = (plan: UserPlan | undefined): void => {
 export const getCachedUserPlan = (): UserPlan => cachedUserPlan;
 
 export interface CloudSyncGate {
-  /** Readest Cloud syncs the library channels (rows, progress, notes, files). */
+  /** Izum StoryFlow Cloud syncs the library channels (rows, progress, notes, files). */
   readest: boolean;
   /** Third-party backends the user switched on, in the fixed webdav/gdrive/s3/onedrive/icloud order. */
   backends: FileSyncBackendKind[];
@@ -186,10 +186,10 @@ export const applySyncBooksAutoEnable = (settings: SystemSettings): boolean => {
 };
 
 /**
- * Whether Readest Cloud storage may be written to (book file uploads and the
- * native book/progress/note rows). Now simply "is Readest Cloud switched on" —
+ * Whether Izum StoryFlow Cloud storage may be written to (book file uploads and the
+ * native book/progress/note rows). Now simply "is Izum StoryFlow Cloud switched on" —
  * it no longer means "and nothing else is". A user can mirror to Drive AND keep
- * Readest Cloud; whether book *files* also go to Readest is still governed
+ * Izum StoryFlow Cloud; whether book *files* also go to Readest is still governed
  * separately by the Manage Sync "book" toggle and the transfer queue.
  */
 export const isReadestCloudStorageActive = (

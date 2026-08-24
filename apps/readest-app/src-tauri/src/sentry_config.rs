@@ -307,18 +307,18 @@ mod tests {
     #[test]
     fn matches_mobi_cover_panic_frame() {
         assert!(is_mobi_cover_panic_frame(
-            "readestlib::mobi_parser::extract_cover"
+            "izumstoryflowlib::mobi_parser::extract_cover"
         ));
         // After catch_unwind the panicking frame is the inner fn.
         assert!(is_mobi_cover_panic_frame(
-            "readestlib::mobi_parser::extract_cover_inner"
+            "izumstoryflowlib::mobi_parser::extract_cover_inner"
         ));
     }
 
     #[test]
     fn keeps_unrelated_panic_frames() {
         assert!(!is_mobi_cover_panic_frame(
-            "readestlib::epub_parser::extract_epub_cover_full"
+            "izumstoryflowlib::epub_parser::extract_epub_cover_full"
         ));
         assert!(!is_mobi_cover_panic_frame(
             "core::slice::index::slice_index_fail"

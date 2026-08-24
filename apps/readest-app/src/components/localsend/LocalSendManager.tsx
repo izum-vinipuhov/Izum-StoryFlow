@@ -74,7 +74,7 @@ const LocalSendManager: React.FC = () => {
     } catch {
       /* fall through to the generic default */
     }
-    return 'Readest';
+    return 'Izum StoryFlow';
   }, []);
 
   // Service lifecycle: match the running state to the per-device preference.

@@ -10,7 +10,7 @@ import { basename, resolve } from 'path';
  * landed as an incremental file under `docker/volumes/db/migrations/`, and
  * nothing mounted those into the db container. Self-hosters therefore booted a
  * database missing `files.replica_id`, the `replicas` table and the
- * `claim_inbox_item` RPC, so file upload, replica sync and Send to Readest all
+ * `claim_inbox_item` RPC, so file upload, replica sync and Send to Izum StoryFlow all
  * failed against an otherwise healthy stack.
  *
  * The fix wires the migrations directory into the first-boot sequence, so this

@@ -9,12 +9,12 @@ local _ = require("readest_i18n")
 local SelfUpdate = {}
 
 local UPDATE_URLS = {
-    "https://download.readest.com/releases/latest.json",
-    "https://github.com/readest/readest/releases/latest/download/latest.json",
+    "https://github.com/izum-vinipuhov/Izum-StoryFlow/releases/latest/download/latest.json",
+    "https://github.com/izum-vinipuhov/Izum-StoryFlow/releases/latest/download/latest.json",
 }
 local DOWNLOAD_URLS = {
-    "https://download.readest.com/releases/%s/Readest-%s-1.koplugin.zip",
-    "https://github.com/readest/readest/releases/download/%s/Readest-%s-1.koplugin.zip",
+    "https://github.com/izum-vinipuhov/Izum-StoryFlow/releases/download/%s/IzumStoryFlow-%s-1.koplugin.zip",
+    "https://github.com/izum-vinipuhov/Izum-StoryFlow/releases/download/%s/IzumStoryFlow-%s-1.koplugin.zip",
 }
 
 function SelfUpdate:compareVersions(v1, v2)

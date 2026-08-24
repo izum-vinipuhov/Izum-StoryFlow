@@ -42,7 +42,7 @@ const globals = {
 };
 
 describe('mergeSyncedGlobalSettings: readestCloud', () => {
-  test('adopts a broadcast Readest Cloud switch-off', () => {
+  test('adopts a broadcast Izum StoryFlow Cloud switch-off', () => {
     const merged = mergeSyncedGlobalSettings(local, {
       ...globals,
       cloudSyncProviders: {

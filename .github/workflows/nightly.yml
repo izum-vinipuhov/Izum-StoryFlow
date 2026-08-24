@@ -323,7 +323,7 @@ jobs:
           else
             bin_file="Readest_${version}_arm64-portable.exe"
           fi
-          exe_file="target/${{ matrix.config.rust_target }}/release/readest.exe"
+          exe_file="target/${{ matrix.config.rust_target }}/release/izumstoryflow.exe"
           # Browsers on Windows refuse to download zips containing exe files, so
           # ship the exe directly (matches release.yml).
           cp "$exe_file" "$bin_file"

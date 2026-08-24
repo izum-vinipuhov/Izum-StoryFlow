@@ -892,7 +892,7 @@ export const READEST_NODE_BASE_URL = 'https://node.readest.com';
 export const SHARE_BASE_URL = `${READEST_WEB_BASE_URL}/s`;
 export const SHARE_EXPIRATION_DAYS = [1, 3, 7] as const;
 
-// Send to Readest — the domain inbound capture emails are addressed to, the
+// Send to Izum StoryFlow — the domain inbound capture emails are addressed to, the
 // R2 bucket holding raw inbound payloads, and the per-user cap on undrained
 // inbox items (defense against a leaked address).
 export const SEND_EMAIL_DOMAIN = 'readest.com';

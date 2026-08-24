@@ -90,7 +90,7 @@ const SendToReadestForm: React.FC<SendToReadestFormProps> = ({ onBack }) => {
       setSenders(sendersData.senders);
       setActivity(inboxData.items);
     } catch {
-      toast(_('Could not load Send to Readest settings'), 'error');
+      toast(_('Could not load Send to Izum StoryFlow settings'), 'error');
     } finally {
       setLoading(false);
     }
@@ -189,7 +189,7 @@ const SendToReadestForm: React.FC<SendToReadestFormProps> = ({ onBack }) => {
     <div className='my-4 w-full'>
       <SubPageHeader
         parentLabel={_('Integrations')}
-        currentLabel={_('Send to Readest')}
+        currentLabel={_('Send to Izum StoryFlow')}
         description={_('Email books and articles straight into your library.')}
         onBack={onBack}
       />
@@ -234,7 +234,7 @@ const SendToReadestForm: React.FC<SendToReadestFormProps> = ({ onBack }) => {
             <h3 className='text-base font-semibold'>{_('Email books straight to your library')}</h3>
             <p className='text-base-content/70 max-w-sm text-sm leading-relaxed'>
               {_(
-                'Forward attachments and articles to your private Readest address. Available on the Plus, Pro, and Lifetime plans.',
+                'Forward attachments and articles to your private Izum StoryFlow address. Available on the Plus, Pro, and Lifetime plans.',
               )}
             </p>
             <button

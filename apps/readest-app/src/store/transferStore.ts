@@ -6,7 +6,7 @@ export type TransferStatus = 'pending' | 'in_progress' | 'completed' | 'failed' 
 export type TransferKind = 'book' | 'replica';
 /**
  * Why a transfer was cancelled. 'user' = an explicit cancel action;
- * 'policy' = the app cancelled it because Readest Cloud is not the
+ * 'policy' = the app cancelled it because Izum StoryFlow Cloud is not the
  * selected sync provider. Policy cancellations are not failures: they
  * are excluded from the failed bucket, Retry All, and per-item retry
  * (retrying would either no-op against the provider gate or loop

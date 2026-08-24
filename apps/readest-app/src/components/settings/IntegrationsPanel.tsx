@@ -257,7 +257,7 @@ const IntegrationsPanel: React.FC = () => {
               </li>
               <li>
                 {_(
-                  'App settings, reading statistics, and dictionaries still sync through your Readest account while signed in.',
+                  'App settings, reading statistics, and dictionaries still sync through your Izum StoryFlow account while signed in.',
                 )}
               </li>
             </Tips>
@@ -287,7 +287,7 @@ const IntegrationsPanel: React.FC = () => {
               </li>
               <li>
                 {_(
-                  'App settings, reading statistics, and dictionaries still sync through your Readest account while signed in.',
+                  'App settings, reading statistics, and dictionaries still sync through your Izum StoryFlow account while signed in.',
                 )}
               </li>
             </Tips>
@@ -319,7 +319,7 @@ const IntegrationsPanel: React.FC = () => {
             {
               <li>
                 {_(
-                  'App settings, reading statistics, and dictionaries still sync through your Readest account while signed in.',
+                  'App settings, reading statistics, and dictionaries still sync through your Izum StoryFlow account while signed in.',
                 )}
               </li>
             }
@@ -361,7 +361,7 @@ const IntegrationsPanel: React.FC = () => {
               </li>
               <li>
                 {_(
-                  'App settings, reading statistics, and dictionaries still sync through your Readest account while signed in.',
+                  'App settings, reading statistics, and dictionaries still sync through your Izum StoryFlow account while signed in.',
                 )}
               </li>
             </Tips>
@@ -391,7 +391,7 @@ const IntegrationsPanel: React.FC = () => {
               </li>
               <li>
                 {_(
-                  'App settings, reading statistics, and dictionaries still sync through your Readest account while signed in.',
+                  'App settings, reading statistics, and dictionaries still sync through your Izum StoryFlow account while signed in.',
                 )}
               </li>
             </Tips>
@@ -404,8 +404,10 @@ const IntegrationsPanel: React.FC = () => {
       <div className='my-4 w-full'>
         <SubPageHeader
           parentLabel={_('Integrations')}
-          currentLabel={_('Readest Cloud')}
-          description={_('Sync your library, reading progress, and highlights with Readest Cloud.')}
+          currentLabel={_('Izum StoryFlow Cloud')}
+          description={_(
+            'Sync your library, reading progress, and highlights with Izum StoryFlow Cloud.',
+          )}
           onBack={() => setSubPage(null)}
         />
         <BoxedList>
@@ -464,7 +466,7 @@ const IntegrationsPanel: React.FC = () => {
   const hardcoverStatus = settings.hardcover?.enabled ? _('Connected') : _('Not connected');
 
   // Cloud sync providers are independently selectable (#5062): any subset of
-  // {Readest Cloud, WebDAV, Google Drive, S3, OneDrive, iCloud} can sync the
+  // {Izum StoryFlow Cloud, WebDAV, Google Drive, S3, OneDrive, iCloud} can sync the
   // library at once. A "configured" third-party provider (WebDAV creds / a Drive
   // token) can be switched on inline; an unconfigured one must be opened to
   // connect.
@@ -473,7 +475,7 @@ const IntegrationsPanel: React.FC = () => {
   const cloudGate = resolveCloudSyncGate(settings, userProfilePlan ?? 'free');
   const enabledBackends = cloudGate.backends;
 
-  /** Book files have a home when Readest Cloud is on or some backend uploads them. */
+  /** Book files have a home when Izum StoryFlow Cloud is on or some backend uploads them. */
   const booksBackedUpBy = (kind: FileSyncBackendKind): boolean =>
     readestEnabled ||
     enabledBackends.some(
@@ -600,13 +602,13 @@ const IntegrationsPanel: React.FC = () => {
           >
             <CloudProviderRow
               icon={RiCloudFill}
-              title={_('Readest Cloud')}
+              title={_('Izum StoryFlow Cloud')}
               status={readestStatus}
               checked={!!user && readestEnabled}
               canToggle={!!user}
               onToggle={(next) => toggleCloudProvider('readest', next)}
               onOpen={() => (user ? setSubPage('readest-cloud') : navigateToLogin(router))}
-              toggleLabel={_('Sync with Readest Cloud')}
+              toggleLabel={_('Sync with Izum StoryFlow Cloud')}
             />
             {/* Third-party providers are premium: every row carries the tier
                 badge; on a free plan the checkbox is disabled and opening a
@@ -718,7 +720,7 @@ const IntegrationsPanel: React.FC = () => {
               </li>
               <li>
                 {_(
-                  'App settings, reading statistics, and dictionaries still sync through your Readest account while signed in.',
+                  'App settings, reading statistics, and dictionaries still sync through your Izum StoryFlow account while signed in.',
                 )}
               </li>
             </Tips>
@@ -740,7 +742,7 @@ const IntegrationsPanel: React.FC = () => {
             />
             <IntegrationRow
               icon={RiSendPlaneLine}
-              title={_('Send to Readest')}
+              title={_('Send to Izum StoryFlow')}
               status={_('Email books to your library')}
               onClick={() => setSubPage('send')}
             />

@@ -187,7 +187,7 @@ const TransferQueuePanel: React.FC = () => {
   const onClose = () => setIsOpen(false);
   const divRef = useKeyDownActions({ onCancel: onClose, onConfirm: onClose });
 
-  // Both bulk actions target Readest Cloud storage; while a third-party provider
+  // Both bulk actions target Izum StoryFlow Cloud storage; while a third-party provider
   // is selected the queue refuses book uploads and a queued download would ask
   // Readest storage for a file that only exists on the provider, so hide both
   // affordances (per-book Upload / Download in the shelf are provider-routed, and

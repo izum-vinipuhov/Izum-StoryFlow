@@ -71,7 +71,7 @@ export const useBooksSync = () => {
   const pullLibrary = useCallback(
     async (fullRefresh = false, verbose = false) => {
       // Providers are independently selectable (#5062): an enabled file
-      // backend and Readest Cloud both run their own pass here, every
+      // backend and Izum StoryFlow Cloud both run their own pass here, every
       // library-refresh surface — pull to refresh, the SettingsMenu sync
       // row, BackupWindow — routes through here. The file pass works
       // logged out (file sync has no Readest account dependency); the
@@ -134,7 +134,7 @@ export const useBooksSync = () => {
     throttle(
       async () => {
         if (isPullingRef.current) return;
-        // Readest Cloud unchecked: the native book channel is gated (the auto
+        // Izum StoryFlow Cloud unchecked: the native book channel is gated (the auto
         // library sync itself is useLibraryFileSync's).
         const settingsNow = useSettingsStore.getState().settings;
         if (!isReadestCloudEnabled(settingsNow)) return;

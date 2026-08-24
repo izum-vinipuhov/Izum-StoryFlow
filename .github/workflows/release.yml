@@ -268,7 +268,7 @@ jobs:
           pnpm --filter @readest/send-to-readest-extension zip
 
           extension_version=$(node -p "require('./apps/readest-app/extensions/send-to-readest/manifest.json').version")
-          extension_zip="apps/readest-app/extensions/send-to-readest/send-to-readest-${extension_version}.zip"
+          extension_zip="apps/readest-app/extensions/send-to-readest/send-to-izum-story-flow-${extension_version}.zip"
 
           echo "Uploading ${extension_zip} to GitHub release"
           gh release upload "${{ needs.get-release.outputs.release_tag }}" "${extension_zip}" --clobber
@@ -421,12 +421,23 @@ jobs:
           echo "storeFile=$RUNNER_TEMP/keystore.jks" >> keystore.properties
 
           popd
+          # The universal + aarch64 builds compile four Rust targets plus
+          # gradle intermediates; on a cold cache this exhausts the 14 GB
+          # runner disk ("failed to build archive"). Free the largest unused
+          # chunks up front, and drop the universal-only Rust targets once the
+          # universal APK is out (the aarch64 build reuses its own target).
+          rm -rf "$ANDROID_HOME/system-images" "$ANDROID_HOME/emulator"
+          rm -rf /usr/share/dotnet /usr/local/lib/android/sdk/system-images
+          docker image prune -af >/dev/null 2>&1 || true
           version=${{ needs.get-release.outputs.release_version }}
           apk_path=src-tauri/gen/android/app/build/outputs/apk/universal/release
           universial_apk=IzumStoryFlow_${version}_universal.apk
           arm64_apk=IzumStoryFlow_${version}_arm64.apk
           pnpm tauri android build
           cp ${apk_path}/app-universal-release.apk $universial_apk
+          rm -rf ../../target/armv7-linux-androideabi \
+                 ../../target/i686-linux-android \
+                 ../../target/x86_64-linux-android
           pnpm tauri android build -t aarch64
           cp ${apk_path}/app-universal-release.apk $arm64_apk
 
@@ -440,8 +451,12 @@ jobs:
           gh release upload ${{ needs.get-release.outputs.release_tag }} $universial_apk.sig --clobber
           gh release upload ${{ needs.get-release.outputs.release_tag }} $arm64_apk.sig --clobber
 
+      # Attestation is not available for user-owned private repositories
+      # (GitHub API limitation); keep the step so public releases get
+      # provenance, but never fail the leg over it.
       - name: attest Android apks
         if: matrix.config.release == 'android'
+        continue-on-error: true
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: |
@@ -541,6 +556,7 @@ jobs:
       # the newline-delimited list subject-path expects.
       - name: attest desktop bundles
         if: matrix.config.release != 'android' && steps.tauri.outputs.artifactPaths != ''
+        continue-on-error: true
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: ${{ join(fromJSON(steps.tauri.outputs.artifactPaths), fromJSON('"\n"')) }}
@@ -581,7 +597,7 @@ jobs:
             exit 1
           fi
 
-          exe_file="target/${{ matrix.config.rust_target }}/release/readest.exe"
+          exe_file="target/${{ matrix.config.rust_target }}/release/izumstoryflow.exe"
           # Browsers on Windows won't download zip files that contain exe files
           # so upload the exe files instead. This is totally stupid.
           # powershell.exe -Command "Compress-Archive -Path $exe_file -DestinationPath $bin_file -Force"
@@ -602,6 +618,7 @@ jobs:
       # portable exe is staged at the workspace root per Windows leg.
       - name: attest Windows portable binary
         if: matrix.config.os == 'windows-latest'
+        continue-on-error: true
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: IzumStoryFlow_*-portable.exe

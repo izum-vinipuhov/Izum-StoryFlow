@@ -138,7 +138,7 @@ export const runFileLibrarySyncPass = async (
   _: TranslationFunc,
 ): Promise<SyncLibraryResult | null> => {
   // Paused means paused (#4959): a downgraded account's still-enabled backends
-  // must not sync, and must not fall back to Readest Cloud either.
+  // must not sync, and must not fall back to Izum StoryFlow Cloud either.
   const backends = getActiveFileSyncBackends(useSettingsStore.getState().settings);
   if (backends.length === 0) return null;
 

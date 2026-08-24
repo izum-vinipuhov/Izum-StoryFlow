@@ -30,11 +30,11 @@ vi.mock('@/services/serverConfig', async (importOriginal) => {
 import ServerConfigDialog from '@/app/auth/components/ServerConfigDialog';
 
 const script =
-  'window.__READEST_RUNTIME_CONFIG={"apiBaseUrl":"http://192.168.0.55:10000","supabaseUrl":"http://192.168.0.55:10001","premiumEnabled":true};';
+  'window.__READEST_RUNTIME_CONFIG={"apiBaseUrl":"http://192.0.2.1:10000","supabaseUrl":"http://192.0.2.1:10001","premiumEnabled":true};';
 
 const savedConfig = {
-  serverUrl: 'http://192.168.0.55:10000',
-  config: { apiBaseUrl: 'http://192.168.0.55:10000', supabaseUrl: 'http://192.168.0.55:10001' },
+  serverUrl: 'http://192.0.2.1:10000',
+  config: { apiBaseUrl: 'http://192.0.2.1:10000', supabaseUrl: 'http://192.0.2.1:10001' },
 };
 
 beforeEach(() => {
@@ -63,16 +63,16 @@ describe('ServerConfigDialog', () => {
     mocks.reloadApp.mockReset();
 
     render(<ServerConfigDialog isOpen onClose={vi.fn()} />);
-    await typeUrlAndSave('http://192.168.0.55:10000');
+    await typeUrlAndSave('http://192.0.2.1:10000');
 
     await waitFor(() => expect(mocks.reloadApp).toHaveBeenCalledTimes(1));
     expect(mocks.tauriFetch).toHaveBeenCalledWith(
-      'http://192.168.0.55:10000/runtime-config.js',
+      'http://192.0.2.1:10000/runtime-config.js',
       expect.anything(),
     );
     const stored = JSON.parse(window.localStorage.getItem('readest_custom_server') ?? '');
-    expect(stored.serverUrl).toBe('http://192.168.0.55:10000');
-    expect(stored.config.supabaseUrl).toBe('http://192.168.0.55:10001');
+    expect(stored.serverUrl).toBe('http://192.0.2.1:10000');
+    expect(stored.config.supabaseUrl).toBe('http://192.0.2.1:10001');
   });
 
   it('shows the unreachable error and stays open when the server does not respond', async () => {
@@ -80,10 +80,10 @@ describe('ServerConfigDialog', () => {
     mocks.reloadApp.mockReset();
 
     render(<ServerConfigDialog isOpen onClose={vi.fn()} />);
-    await typeUrlAndSave('http://192.168.0.55:10000');
+    await typeUrlAndSave('http://192.0.2.1:10000');
 
     expect(
-      await screen.findByText('Could not reach a Readest server at this address'),
+      await screen.findByText('Could not reach a Izum StoryFlow server at this address'),
     ).toBeTruthy();
     expect(mocks.reloadApp).not.toHaveBeenCalled();
     expect(window.localStorage.getItem('readest_custom_server')).toBeNull();
@@ -93,10 +93,10 @@ describe('ServerConfigDialog', () => {
     mocks.tauriFetch.mockResolvedValue(new Response('<html>nginx</html>', { status: 200 }));
 
     render(<ServerConfigDialog isOpen onClose={vi.fn()} />);
-    await typeUrlAndSave('http://192.168.0.55:10000');
+    await typeUrlAndSave('http://192.0.2.1:10000');
 
     expect(
-      await screen.findByText('This address does not look like a Readest server'),
+      await screen.findByText('This address does not look like a Izum StoryFlow server'),
     ).toBeTruthy();
   });
 
@@ -106,7 +106,7 @@ describe('ServerConfigDialog', () => {
 
     render(<ServerConfigDialog isOpen onClose={vi.fn()} />);
     const input = (await screen.findByRole('textbox')) as HTMLInputElement;
-    expect(input.value).toBe('http://192.168.0.55:10000');
+    expect(input.value).toBe('http://192.0.2.1:10000');
 
     fireEvent.click(screen.getByRole('button', { name: 'Reset' }));
     expect(window.localStorage.getItem('readest_custom_server')).toBeNull();

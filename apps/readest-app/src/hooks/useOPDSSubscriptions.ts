@@ -63,7 +63,7 @@ export function useOPDSSubscriptions() {
 
         if (totalNewBooks > 0) {
           // Mirror the manual OPDS download path: queue cloud upload for each
-          // newly imported book when the user is logged in and Readest Cloud
+          // newly imported book when the user is logged in and Izum StoryFlow Cloud
           // storage is active. Delay so the transfer manager has a chance
           // to finish initializing if this fires right after libraryLoaded.
           const { settings: currentSettings } = useSettingsStore.getState();

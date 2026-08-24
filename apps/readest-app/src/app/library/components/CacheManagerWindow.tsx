@@ -35,7 +35,7 @@ type CacheStatus = 'scanning' | 'idle' | 'confirming' | 'clearing' | 'done' | 'e
 /**
  * Locations Manage Cache clears (mobile only). Both iOS and Android clear the
  * app Cache and Temp bases; iOS additionally clears the `Documents/Inbox`
- * folder, where "Open in Readest" leaves already-imported book copies that
+ * folder, where "Open in Izum StoryFlow" leaves already-imported book copies that
  * otherwise linger forever.
  */
 const getCacheSources = async (appService: AppService): Promise<CacheSource[]> => {

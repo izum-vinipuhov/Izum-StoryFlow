@@ -147,7 +147,7 @@ describe('provider gating of book uploads', () => {
     expect(Object.keys(useTransferStore.getState().transfers)).toHaveLength(0);
   });
 
-  test('queueUpload works when Readest Cloud is the provider', async () => {
+  test('queueUpload works when Izum StoryFlow Cloud is the provider', async () => {
     await initManager();
 
     const id = transferManager.queueUpload(makeBook());

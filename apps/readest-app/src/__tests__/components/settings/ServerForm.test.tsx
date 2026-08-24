@@ -25,11 +25,11 @@ vi.mock('@/services/serverConfig', async (importOriginal) => {
 import ServerForm from '@/components/settings/integrations/ServerForm';
 
 const script =
-  'window.__READEST_RUNTIME_CONFIG={"apiBaseUrl":"http://192.168.0.55:10000","supabaseUrl":"http://192.168.0.55:10001","premiumEnabled":true};';
+  'window.__READEST_RUNTIME_CONFIG={"apiBaseUrl":"http://192.0.2.1:10000","supabaseUrl":"http://192.0.2.1:10001","premiumEnabled":true};';
 
 const savedConfig = {
-  serverUrl: 'http://192.168.0.55:10000',
-  config: { apiBaseUrl: 'http://192.168.0.55:10000', supabaseUrl: 'http://192.168.0.55:10001' },
+  serverUrl: 'http://192.0.2.1:10000',
+  config: { apiBaseUrl: 'http://192.0.2.1:10000', supabaseUrl: 'http://192.0.2.1:10001' },
 };
 
 beforeEach(() => {
@@ -55,7 +55,7 @@ describe('ServerForm', () => {
 
     render(<ServerForm />);
 
-    expect(getInput().value).toBe('http://192.168.0.55:10000');
+    expect(getInput().value).toBe('http://192.0.2.1:10000');
     expect(getConfirmButton().disabled).toBe(true);
   });
 
@@ -83,17 +83,17 @@ describe('ServerForm', () => {
     mocks.reloadApp.mockReset();
 
     render(<ServerForm />);
-    fireEvent.change(getInput(), { target: { value: 'http://192.168.0.55:10000' } });
+    fireEvent.change(getInput(), { target: { value: 'http://192.0.2.1:10000' } });
     fireEvent.click(getConfirmButton());
 
     await waitFor(() => expect(mocks.reloadApp).toHaveBeenCalledTimes(1));
     expect(mocks.tauriFetch).toHaveBeenCalledWith(
-      'http://192.168.0.55:10000/runtime-config.js',
+      'http://192.0.2.1:10000/runtime-config.js',
       expect.anything(),
     );
     const stored = JSON.parse(window.localStorage.getItem('readest_custom_server') ?? '');
-    expect(stored.serverUrl).toBe('http://192.168.0.55:10000');
-    expect(stored.config.supabaseUrl).toBe('http://192.168.0.55:10001');
+    expect(stored.serverUrl).toBe('http://192.0.2.1:10000');
+    expect(stored.config.supabaseUrl).toBe('http://192.0.2.1:10001');
   });
 
   it('shows the unreachable error and keeps the stored config when the server does not respond', async () => {
@@ -101,15 +101,15 @@ describe('ServerForm', () => {
     mocks.tauriFetch.mockResolvedValue(new Response(null, { status: 502 }));
 
     render(<ServerForm />);
-    fireEvent.change(getInput(), { target: { value: 'http://192.168.0.55:20000' } });
+    fireEvent.change(getInput(), { target: { value: 'http://192.0.2.1:20000' } });
     fireEvent.click(getConfirmButton());
 
     expect(
-      await screen.findByText('Could not reach a Readest server at this address'),
+      await screen.findByText('Could not reach a Izum StoryFlow server at this address'),
     ).toBeTruthy();
     expect(mocks.reloadApp).not.toHaveBeenCalled();
     expect(JSON.parse(window.localStorage.getItem('readest_custom_server') ?? '{}').serverUrl).toBe(
-      'http://192.168.0.55:10000',
+      'http://192.0.2.1:10000',
     );
   });
 

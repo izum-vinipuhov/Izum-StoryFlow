@@ -1,4 +1,4 @@
-// TypeScript mirrors of the Send to Readest tables in
+// TypeScript mirrors of the Send to Izum StoryFlow tables in
 // docker/volumes/db/init/schema.sql.
 
 export interface DBSendAddress {

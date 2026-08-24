@@ -40,7 +40,7 @@ import { shouldOpenTransient } from '@/helpers/openWith';
  *   capture), and `'VIEW'` with auto-import ON: push the URLs through
  *   `window.OPEN_WITH_FILES` so `library/page.tsx::processOpenWithFiles`
  *   does a full ingest + cloud upload — the file lands in the library and
- *   syncs, which is what a "Send to Readest" share (and an opt-in "Open
+ *   syncs, which is what a "Send to Izum StoryFlow" share (and an opt-in "Open
  *   with" import) is meant to honour.
  */
 export function useOpenWithBooks() {

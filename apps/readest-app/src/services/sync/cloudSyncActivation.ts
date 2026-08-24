@@ -19,7 +19,7 @@ import { broadcastGlobalSettings } from '@/utils/settingsSync';
  * "mirror my library here". An explicit `syncBooks` opt-out while the provider
  * stays on is respected — a redundant re-activation changes nothing.
  *
- * Switching Readest Cloud OFF stamps `readestCloud.disabledAt`, the anchor for
+ * Switching Izum StoryFlow Cloud OFF stamps `readestCloud.disabledAt`, the anchor for
  * mixed-fleet detection ("when did this device stop writing native rows").
  */
 export const withCloudProviderEnabled = (

@@ -107,11 +107,11 @@ export const isSyncCategoryLocked = (category: SyncCategory): boolean => {
 };
 
 /**
- * Book-data categories gated on the Readest Cloud switch (#4380). Providers
+ * Book-data categories gated on the Izum StoryFlow Cloud switch (#4380). Providers
  * are independently selectable (#5062): these categories ride the native
- * channels whenever Readest Cloud is switched on, and any enabled file
+ * channels whenever Izum StoryFlow Cloud is switched on, and any enabled file
  * backend mirrors them in parallel through library.json + config.json. Only
- * an unchecked Readest Cloud gates the native rows off. Account-level
+ * an unchecked Izum StoryFlow Cloud gates the native rows off. Account-level
  * categories (settings, stats, dictionaries, fonts, textures, OPDS catalogs)
  * have no file-based counterpart and always stay native.
  */
@@ -130,7 +130,7 @@ export const isSyncCategoryEnabled = (id: string): boolean => {
   ) {
     // Runtime override, deliberately not written into syncCategories:
     // the user's own toggles persist untouched and govern the native
-    // channels again the moment Readest Cloud is re-selected. The
+    // channels again the moment Izum StoryFlow Cloud is re-selected. The
     // Manage Sync panel surfaces this state per-row.
     return false;
   }

@@ -118,12 +118,12 @@ export function SyncCategoriesSection() {
           const c = copy[category];
           const on = enabled(category);
           const locked = isSyncCategoryLocked(category);
-          // While Readest Cloud is switched off and a file backend is on, the
+          // While Izum StoryFlow Cloud is switched off and a file backend is on, the
           // book / progress / note channels are routed to the file backend at
           // runtime and these toggles have no immediate effect. The
           // description says so in place (same pattern as `locked`), but the
           // toggle stays interactive and persists: it governs the native
-          // channel the user returns to when Readest Cloud is re-enabled.
+          // channel the user returns to when Izum StoryFlow Cloud is re-enabled.
           const managedByProvider =
             !readestEnabled &&
             backends.length > 0 &&

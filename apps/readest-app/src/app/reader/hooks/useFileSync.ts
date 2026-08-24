@@ -31,7 +31,7 @@ import { useWindowActiveChanged } from './useWindowActiveChanged';
  * Cloud sync providers are independently selectable (#5062): several
  * third-party backends (WebDAV, Google Drive, S3, OneDrive) can mirror a
  * book's progress and annotations in parallel, alongside (or instead of)
- * Readest Cloud, whose native progress sync is `useProgressSync`'s job, not
+ * Izum StoryFlow Cloud, whose native progress sync is `useProgressSync`'s job, not
  * this hook's, and runs independently.
  *
  * The hook is called exactly once per book (React forbids a variable hook
@@ -107,7 +107,7 @@ export const useFileSync = (bookKey: string) => {
 
   const { userProfilePlan } = useQuotaStats();
   // Every enabled third-party backend syncs this book in parallel (#5062);
-  // Readest Cloud's native progress sync is useProgressSync's job, not this
+  // Izum StoryFlow Cloud's native progress sync is useProgressSync's job, not this
   // hook's, and runs independently.
   const activeKinds = useMemo(
     () => getActiveFileSyncBackends(settings, userProfilePlan ?? 'free'),

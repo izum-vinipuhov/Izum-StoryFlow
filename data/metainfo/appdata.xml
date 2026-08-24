@@ -2,13 +2,13 @@
 <component type="desktop-application">
   <id>com.bilingify.readest</id>
 
-  <name>Readest</name>
+  <name>Izum StoryFlow</name>
   <summary>Modern, feature-rich ebook reader</summary>
 
   <description>
-    <p>Readest is a modern, feature-rich ebook reader designed for avid readers offering seamless cross-platform access, powerful tools, and an intuitive interface to elevate your reading experience.</p>
-    <p>Built as a modern rewrite of Foliate, Readest leverages Next.js 15 and Tauri v2 to deliver a smooth, cross-platform experience across macOS, Windows, Linux, Android, iOS, and the Web.</p>
-    <p>Whether you're analyzing complex texts, immersing yourself in stories, or exploring new ideas, Readest adapts to your needs with powerful features for deep, thoughtful reading.</p>
+    <p>Izum StoryFlow is a modern, feature-rich ebook reader designed for avid readers offering seamless cross-platform access, powerful tools, and an intuitive interface to elevate your reading experience.</p>
+    <p>Built as a modern rewrite of Foliate, Izum StoryFlow leverages Next.js 15 and Tauri v2 to deliver a smooth, cross-platform experience across macOS, Windows, Linux, Android, iOS, and the Web.</p>
+    <p>Whether you're analyzing complex texts, immersing yourself in stories, or exploring new ideas, Izum StoryFlow adapts to your needs with powerful features for deep, thoughtful reading.</p>
     <p>Key features include:</p>
     <ul>
       <li>Multi-format support for EPUB, MOBI, KF8 (AZW3), FB2, CBZ, TXT, and PDF (experimental).</li>
@@ -23,9 +23,9 @@
       <li>Cross-platform synchronization of book files, reading progress, notes, and bookmarks across all supported platforms.</li>
       <li>Text-to-Speech functionality for a more accessible reading experience.</li>
       <li>Organize, sort, and manage your entire ebook library with advanced library management tools.</li>
-      <li>One-click file association to quickly open files in Readest from your file browser.</li>
+      <li>One-click file association to quickly open files in Izum StoryFlow from your file browser.</li>
     </ul>
-    <p>Readest also includes custom CSS support for personalized styling, and code syntax highlighting for technical books. The application is designed to honor the legacy of deep reading while embracing modern technology for an enhanced experience.</p>
+    <p>Izum StoryFlow also includes custom CSS support for personalized styling, and code syntax highlighting for technical books. The application is designed to honor the legacy of deep reading while embracing modern technology for an enhanced experience.</p>
   </description>
 
   <categories>
@@ -51,11 +51,11 @@
     <keyword>sync</keyword>
   </keywords>
 
-  <url type="homepage">https://github.com/readest/readest</url>
-  <url type="bugtracker">https://github.com/readest/readest/issues</url>
-  <url type="help">https://github.com/readest/readest/wiki</url>
-  <url type="donation">https://github.com/sponsors/readest</url>
-  <url type="vcs-browser">https://github.com/readest/readest</url>
+  <url type="homepage">https://github.com/izum-vinipuhov/Izum-StoryFlow</url>
+  <url type="bugtracker">https://github.com/izum-vinipuhov/Izum-StoryFlow/issues</url>
+  <url type="help">https://github.com/izum-vinipuhov/Izum-StoryFlow/wiki</url>
+  <url type="donation">https://github.com/sponsors/izum-vinipuhov</url>
+  <url type="vcs-browser">https://github.com/izum-vinipuhov/Izum-StoryFlow</url>
 
   <launchable type="desktop-id">com.bilingify.readest.desktop</launchable>
 
@@ -110,7 +110,7 @@
           <li>Text-to-Speech: Redesigned read-aloud as a mini player with an expandable full player, and playback now keeps going even after you close the book</li>
           <li>Text-to-Speech: Online voices now play gap-free with chapter seeking and lock-screen controls, plus Android Auto support so you can listen in the car</li>
           <li>Sync: Added S3-compatible cloud storage and a new Cloud Sync screen to choose and switch between your sync providers</li>
-          <li>Integrations: Added a Calibre plugin to push books and custom columns into Readest, and improved OPDS sign-in and auto-download for self-hosted catalogs</li>
+          <li>Integrations: Added a Calibre plugin to push books and custom columns into Izum StoryFlow, and improved OPDS sign-in and auto-download for self-hosted catalogs</li>
           <li>Library: New books dropped into watched folders now import automatically, and you can sort your shelf by reading progress</li>
           <li>More: Added a speak button in the dictionary popup, a cleaner theme switcher, and per-rule toggles for proofreading</li>
         </ul>
@@ -180,7 +180,7 @@
     <release version="0.11.2" date="2026-05-31">
       <description>
         <ul>
-          <li>Send to Readest: Clip web pages and articles into your library via the system share sheet, or by emailing them in</li>
+          <li>Send to Izum StoryFlow: Clip web pages and articles into your library via the system share sheet, or by emailing them in</li>
           <li>Dictionary: Look up words with your device's built-in system dictionary on macOS, iOS, and Android, plus faster MDict and StarDict imports</li>
           <li>Library: Import books from a folder with format and size filters, or read them in place from external folders without copying</li>
           <li>Reading: The reading ruler now follows individual lines, you can swipe along the edge to adjust brightness on mobile, and customize hardware-button page turning</li>
@@ -198,7 +198,7 @@
         <ul>
           <li>Dictionaries: You can now import your own StarDict and MDict dictionaries</li>
           <li>Sync: Your custom dictionaries, custom fonts, background textures and OPDS catalogs now sync across devices</li>
-          <li>KOReader Sync: Browse your full Readest Library from inside KOReader, with improved sync diagnostics</li>
+          <li>KOReader Sync: Browse your full Izum StoryFlow Library from inside KOReader, with improved sync diagnostics</li>
           <li>OPDS: Stream books over OPDS-PSE and optionally auto-download new titles from feeds</li>
           <li>Sharing: Create share links for books, jump directly to book via deep links in exported annotations</li>
           <li>Library: Added an optional 4-digit PIN lock at app launch to keep your library private</li>
@@ -231,12 +231,12 @@
   <project_license>AGPL-3.0-or-later</project_license>
 
   <developer id="com.readest">
-    <name>Readest Team</name>
+    <name>Izum StoryFlow Team</name>
   </developer>
 
   <screenshots>
     <screenshot type="default">
-      <caption>Readest main interface with annotation</caption>
+      <caption>Izum StoryFlow main interface with annotation</caption>
       <image type="source">https://raw.githubusercontent.com/readest/readest/refs/heads/main/data/screenshots/annotations.png</image>
     </screenshot>
     <screenshot>

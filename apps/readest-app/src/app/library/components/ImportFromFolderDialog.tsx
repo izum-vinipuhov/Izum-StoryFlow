@@ -77,7 +77,7 @@ export interface ImportFromFolderResult {
   readInPlace: boolean;
   /**
    * When `true`, keep this folder watched: on every library open and app
-   * focus, Readest re-scans it and imports any newly-added books. Recorded
+   * focus, Izum StoryFlow re-scans it and imports any newly-added books. Recorded
    * in `settings.autoImportFolders`. Only meaningful together with
    * {@link readInPlace} (auto-import reads books in place), so it is forced
    * `false` whenever `readInPlace` is off. Defaults to `false`.
@@ -500,7 +500,7 @@ const ImportFromFolderDialog: React.FC<ImportFromFolderDialogProps> = ({
                 <span className='block'>{_('Auto-import new books from this folder')}</span>
                 <span className='text-base-content/60 block text-xs'>
                   {_(
-                    'When new books are added to this folder, import them automatically the next time Readest opens or returns to the foreground.',
+                    'When new books are added to this folder, import them automatically the next time Izum StoryFlow opens or returns to the foreground.',
                   )}
                 </span>
               </span>

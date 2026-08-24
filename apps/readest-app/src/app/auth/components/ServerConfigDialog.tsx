@@ -22,7 +22,7 @@ interface ServerConfigDialogProps {
 
 /**
  * Modal opened from the sign-in panel's "Configure server" entry: points the
- * client at the user's own self-hosted Readest server. The server's
+ * client at the user's own self-hosted Izum StoryFlow server. The server's
  * `/runtime-config.js` (the same script the web build consumes) supplies the
  * API/supabase URLs; they are persisted and applied on the next app load via
  * the `getRuntimeConfig` fallback.
@@ -55,8 +55,8 @@ const ServerConfigDialog: React.FC<ServerConfigDialogProps> = ({ isOpen, onClose
     } catch (e) {
       setError(
         e instanceof Error && e.message === SERVER_UNREACHABLE_ERROR
-          ? _('Could not reach a Readest server at this address')
-          : _('This address does not look like a Readest server'),
+          ? _('Could not reach a Izum StoryFlow server at this address')
+          : _('This address does not look like a Izum StoryFlow server'),
       );
       setConnecting(false);
     }
@@ -76,7 +76,9 @@ const ServerConfigDialog: React.FC<ServerConfigDialogProps> = ({ isOpen, onClose
     >
       <div className='flex flex-col gap-4 px-6 pb-6 pt-2'>
         <p className='text-base-content/60 text-sm leading-relaxed'>
-          {_('Enter the address of your Readest server. The app will sign in and sync with it.')}
+          {_(
+            'Enter the address of your Izum StoryFlow server. The app will sign in and sync with it.',
+          )}
         </p>
         <label className='flex flex-col gap-1.5'>
           <span className='text-base-content/60 text-sm'>{_('Server URL')}</span>
@@ -85,7 +87,7 @@ const ServerConfigDialog: React.FC<ServerConfigDialogProps> = ({ isOpen, onClose
             autoFocus
             autoComplete='off'
             className='input input-bordered eink-bordered placeholder:text-base-content/35 w-full'
-            placeholder='http://192.168.0.55:10000'
+            placeholder='http://192.0.2.1:10000'
             value={serverUrl}
             disabled={connecting}
             onChange={(e) => setServerUrl(e.target.value)}

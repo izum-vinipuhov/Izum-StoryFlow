@@ -25,7 +25,7 @@ interface BookDownloadOptions {
 /**
  * Explicit per-book Upload/Download routing (#5062) — cloud sync providers are
  * independently selectable, so a book's destinations depend on which of
- * {Readest Cloud, a file backend} are switched on. Extracted out of the huge
+ * {Izum StoryFlow Cloud, a file backend} are switched on. Extracted out of the huge
  * library page component so this routing (previously untested) can be
  * exercised directly with `renderHook`, the same pattern already used for
  * {@link useBooksSync} and {@link useLibraryFileSync}.
@@ -47,7 +47,7 @@ export const useBookTransferActions = (
       // An explicit Upload must reach EVERY destination the user selected
       // (#5062), not just the first one.
       const pushed = backends.length > 0 ? await runFileBookUpload(envConfig, book) : false;
-      // Readest Cloud uploads go through the transfer queue (resumable, with its
+      // Izum StoryFlow Cloud uploads go through the transfer queue (resumable, with its
       // own progress panel), so it reports "queued", not "uploaded".
       const queued = readest ? !!transferManager.queueUpload(book, 1) : false;
 
@@ -91,7 +91,7 @@ export const useBookTransferActions = (
       // `uploadedAt` proves that some cloud copy exists, but it does not encode
       // provenance: the file-sync engine stamps it for WebDAV/Drive/S3/etc. too.
       // Try the enabled file mirrors first so a metadata-only shelf row is not
-      // misrouted into Readest Cloud. When none has the file, fall through to
+      // misrouted into Izum StoryFlow Cloud. When none has the file, fall through to
       // the native, resumable path if that backend is also enabled (#5009).
       if (backends.length > 0) {
         const ok = await runFileBookDownload(envConfig, book);

@@ -57,7 +57,7 @@ export const getUserProfilePlan = (token: string): UserPlan => {
 };
 
 /**
- * Plans that include the "Send to Readest via email" feature: Plus,
+ * Plans that include the "Send to Izum StoryFlow via email" feature: Plus,
  * Pro, and Lifetime (`purchase`). Free users see an upgrade card on
  * the client and get a 403 from the server endpoints that allocate /
  * rotate the address, plus a bounce from the inbound email Worker.
@@ -87,7 +87,7 @@ export const isCloudSyncInPlan = (plan: UserPlan): boolean =>
  * sync (WebDAV / Google Drive / S3) requires a {@link CLOUD_SYNC_PLANS} plan —
  * free users see the provider rows with a Premium badge and an upgrade route
  * instead of the config sub-pages, and a downgraded account's still-selected
- * provider is paused (never a silent fallback to Readest Cloud uploads, #4959).
+ * provider is paused (never a silent fallback to Izum StoryFlow Cloud uploads, #4959).
  * Every gate goes through {@link isCloudSyncAllowed}, so this flag is the
  * whole toggle.
  */
