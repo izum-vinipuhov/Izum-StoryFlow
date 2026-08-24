@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Izum StoryFlow",
-  "mainBinaryName": "readest",
+  "mainBinaryName": "izumstoryflow",
   "identifier": "com.izum.vinipuhov.storyflow",
   "version": "../package.json",
   "build": {
