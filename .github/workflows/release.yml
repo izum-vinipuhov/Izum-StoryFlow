@@ -99,6 +99,10 @@ jobs:
           release_description: ${{ steps.update-release.outputs.release_description }}
         with:
           script: |
+            if (!process.env.discord_webhook) {
+              core.warning('No DISCORD_WEBHOOK secret set; skipping Discord notification');
+              return;
+            }
             let payload = process.env.release_description;
 
             // Replace @username with markdown link
@@ -185,7 +189,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           version=${{ needs.get-release.outputs.release_version }}
-          plugin_zip="Readest-${version}-1.koplugin.zip"
+          plugin_zip="IzumStoryFlow-${version}-1.koplugin.zip"
           meta_file="apps/readest.koplugin/_meta.lua"
           perl -i -pe "s/^}/    version = \"${version}\",\n}/" "${meta_file}"
 
@@ -232,7 +236,7 @@ jobs:
             apps/readest-calibre-plugin/__init__.py
 
           make -C apps/readest-calibre-plugin zip
-          plugin_zip="apps/readest-calibre-plugin/dist/Readest-${version}.calibre-plugin.zip"
+          plugin_zip="apps/readest-calibre-plugin/dist/IzumStoryFlow-${version}.calibre-plugin.zip"
 
           echo "Uploading ${plugin_zip} to GitHub release"
           gh release upload ${{ needs.get-release.outputs.release_tag }} ${plugin_zip} --clobber
@@ -292,14 +296,19 @@ jobs:
             release: linux
             arch: aarch64
             rust_target: aarch64-unknown-linux-gnu
-          - os: macos-latest
-            release: macos
-            arch: aarch64
-            rust_target: x86_64-apple-darwin,aarch64-apple-darwin
-            # --config layers the iCloud overlay (Developer ID provisioning
-            # profile + entitlements) onto the direct-distribution build; see
-            # src-tauri/tauri.macos-nonestore.conf.json.
-            args: '--target universal-apple-darwin --config src-tauri/tauri.macos-nonestore.conf.json'
+          # macOS is suspended until the Izum StoryFlow fork has its own Apple
+          # Developer ID certificate + provisioning profile: the upstream
+          # ReadestDeveloperID.provisionprofile in src-tauri/profiles/ cannot
+          # sign this app, and APPLE_* secrets are not set yet. Restore this
+          # entry (and the APPLE_* secrets) when Apple signing is available.
+          # - os: macos-latest
+          #   release: macos
+          #   arch: aarch64
+          #   rust_target: x86_64-apple-darwin,aarch64-apple-darwin
+          #   # --config layers the iCloud overlay (Developer ID provisioning
+          #   # profile + entitlements) onto the direct-distribution build; see
+          #   # src-tauri/tauri.macos-nonestore.conf.json.
+          #   args: '--target universal-apple-darwin --config src-tauri/tauri.macos-nonestore.conf.json'
           - os: windows-latest
             release: windows
             arch: x86_64
@@ -414,8 +423,8 @@ jobs:
           popd
           version=${{ needs.get-release.outputs.release_version }}
           apk_path=src-tauri/gen/android/app/build/outputs/apk/universal/release
-          universial_apk=Readest_${version}_universal.apk
-          arm64_apk=Readest_${version}_arm64.apk
+          universial_apk=IzumStoryFlow_${version}_universal.apk
+          arm64_apk=IzumStoryFlow_${version}_arm64.apk
           pnpm tauri android build
           cp ${apk_path}/app-universal-release.apk $universial_apk
           pnpm tauri android build -t aarch64
@@ -436,8 +445,8 @@ jobs:
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: |
-            apps/readest-app/Readest_${{ needs.get-release.outputs.release_version }}_universal.apk
-            apps/readest-app/Readest_${{ needs.get-release.outputs.release_version }}_arm64.apk
+            apps/readest-app/IzumStoryFlow_${{ needs.get-release.outputs.release_version }}_universal.apk
+            apps/readest-app/IzumStoryFlow_${{ needs.get-release.outputs.release_version }}_arm64.apk
 
       - name: download and update latest.json for Android release
         if: matrix.config.release == 'android'
@@ -459,11 +468,11 @@ jobs:
           fi
 
           version=${{ needs.get-release.outputs.release_version }}
-          universial_apk_url="https://github.com/izum-vinipuhov/Izum-StoryFlow/releases/download/${{ needs.get-release.outputs.release_tag }}/Readest_${version}_universal.apk"
-          arm64_apk_url="https://github.com/izum-vinipuhov/Izum-StoryFlow/releases/download/${{ needs.get-release.outputs.release_tag }}/Readest_${version}_arm64.apk"
+          universial_apk_url="https://github.com/izum-vinipuhov/Izum-StoryFlow/releases/download/${{ needs.get-release.outputs.release_tag }}/IzumStoryFlow_${version}_universal.apk"
+          arm64_apk_url="https://github.com/izum-vinipuhov/Izum-StoryFlow/releases/download/${{ needs.get-release.outputs.release_tag }}/IzumStoryFlow_${version}_arm64.apk"
 
-          universial_sig=$(cat Readest_${version}_universal.apk.sig)
-          arm64_sig=$(cat Readest_${version}_arm64.apk.sig)
+          universial_sig=$(cat IzumStoryFlow_${version}_universal.apk.sig)
+          arm64_sig=$(cat IzumStoryFlow_${version}_arm64.apk.sig)
 
           jq --arg url "$universial_apk_url" \
               --arg sig "$universial_sig" \
@@ -564,9 +573,9 @@ jobs:
           version=${{ needs.get-release.outputs.release_version }}
 
           if [ "$arch" = "x86_64" ]; then
-            bin_file="Readest_${version}_x64-portable.exe"
+            bin_file="IzumStoryFlow_${version}_x64-portable.exe"
           elif [ "$arch" = "aarch64" ]; then
-            bin_file="Readest_${version}_arm64-portable.exe"
+            bin_file="IzumStoryFlow_${version}_arm64-portable.exe"
           else
             echo "Unknown architecture: $arch"
             exit 1
@@ -595,7 +604,7 @@ jobs:
         if: matrix.config.os == 'windows-latest'
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
-          subject-path: Readest_*-portable.exe
+          subject-path: IzumStoryFlow_*-portable.exe
 
       - name: download and update latest.json for Windows portable release
         if: matrix.config.os == 'windows-latest'
@@ -620,10 +629,10 @@ jobs:
           arch=${{ matrix.config.arch }}
 
           if [ "$arch" = "x86_64" ]; then
-            bin_file="Readest_${version}_x64-portable.exe"
+            bin_file="IzumStoryFlow_${version}_x64-portable.exe"
             platform_key="windows-x86_64-portable"
           elif [ "$arch" = "aarch64" ]; then
-            bin_file="Readest_${version}_arm64-portable.exe"
+            bin_file="IzumStoryFlow_${version}_arm64-portable.exe"
             platform_key="windows-aarch64-portable"
           else
             echo "Unknown architecture: $arch"

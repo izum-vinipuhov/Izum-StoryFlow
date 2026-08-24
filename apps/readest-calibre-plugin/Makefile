@@ -1,4 +1,4 @@
-NAME = Readest
+NAME = IzumStoryFlow
 # The app's package.json is the single source of truth for the version, the
 # same one release.yml reads. `version` stamps it into __init__.py, which is
 # what calibre shows in Preferences > Plugins.
