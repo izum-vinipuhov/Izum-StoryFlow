@@ -111,33 +111,304 @@ describe('updater', () => {
     });
   });
 
-  // ── checkForAppUpdates (disabled on the Izum StoryFlow fork) ────
+  // ── checkForAppUpdates ─────────────────────────────────────────
   describe('checkForAppUpdates', () => {
-    test('is disabled: never checks or prompts for updates', async () => {
-      const result = await checkForAppUpdates(dummyTranslate, false, 'stable');
+    test('skips check when auto-check and interval has not elapsed', async () => {
+      const now = Date.now();
+      localStorage.setItem('lastAppUpdateCheck', now.toString());
+
+      const result = await checkForAppUpdates(dummyTranslate, true);
 
       expect(result).toBe(false);
       expect(mockCheck).not.toHaveBeenCalled();
-      expect(mockTauriFetch).not.toHaveBeenCalled();
+    });
+
+    test('proceeds with check when interval has elapsed', async () => {
+      const pastTime = Date.now() - 86400 * 1000 - 1000;
+      localStorage.setItem('lastAppUpdateCheck', pastTime.toString());
+
+      mockOsType.mockReturnValue('macos');
+      mockCheck.mockResolvedValue(null);
+
+      const result = await checkForAppUpdates(dummyTranslate, true);
+
+      expect(result).toBe(false);
+      expect(mockCheck).toHaveBeenCalled();
+    });
+
+    test('proceeds when no previous check timestamp', async () => {
+      mockOsType.mockReturnValue('macos');
+      mockCheck.mockResolvedValue(null);
+
+      const result = await checkForAppUpdates(dummyTranslate, true);
+
+      expect(result).toBe(false);
+      expect(mockCheck).toHaveBeenCalled();
+    });
+
+    test('always checks when isAutoCheck is false', async () => {
+      const now = Date.now();
+      localStorage.setItem('lastAppUpdateCheck', now.toString());
+
+      mockOsType.mockReturnValue('macos');
+      mockCheck.mockResolvedValue(null);
+
+      const result = await checkForAppUpdates(dummyTranslate, false);
+
+      expect(result).toBe(false);
+      expect(mockCheck).toHaveBeenCalled();
+    });
+
+    test('returns true and shows update window when update available on macOS', async () => {
+      mockOsType.mockReturnValue('macos');
+      mockCheck.mockResolvedValue({ version: '2.0.0' });
+
+      const result = await checkForAppUpdates(dummyTranslate, false);
+
+      expect(result).toBe(true);
+      expect(MockWebviewWindowLastArgs).toHaveLength(1);
+      expect(MockWebviewWindowLastArgs[0]![0]).toBe('updater');
+      expect(MockWebviewWindowLastArgs[0]![1]).toEqual(
+        expect.objectContaining({
+          url: '/updater?latestVersion=2.0.0',
+          title: 'Software Update',
+        }),
+      );
+    });
+
+    test('handles windows platform', async () => {
+      mockOsType.mockReturnValue('windows');
+      mockCheck.mockResolvedValue(null);
+
+      const result = await checkForAppUpdates(dummyTranslate, false);
+      expect(result).toBe(false);
+    });
+
+    test('handles linux platform', async () => {
+      mockOsType.mockReturnValue('linux');
+      mockCheck.mockResolvedValue({ version: '3.0.0' });
+
+      const result = await checkForAppUpdates(dummyTranslate, false);
+      expect(result).toBe(true);
+    });
+
+    test('checks Android update via fetch when OS is android', async () => {
+      mockOsType.mockReturnValue('android');
+      mockAppVersion = '1.0.0';
+
+      mockTauriFetch.mockResolvedValue({
+        json: () =>
+          Promise.resolve({
+            version: '2.0.0',
+            platforms: { 'android-arm64': {} },
+          }),
+      });
+
+      const result = await checkForAppUpdates(dummyTranslate, false);
+
+      expect(result).toBe(true);
+      expect(mockSetUpdaterWindowVisible).toHaveBeenCalledWith(true, '2.0.0', '1.0.0');
+    });
+
+    test('Android check with android-universal platform', async () => {
+      mockOsType.mockReturnValue('android');
+      mockAppVersion = '1.0.0';
+
+      mockTauriFetch.mockResolvedValue({
+        json: () =>
+          Promise.resolve({
+            version: '2.0.0',
+            platforms: { 'android-universal': {} },
+          }),
+      });
+
+      const result = await checkForAppUpdates(dummyTranslate, false);
+
+      expect(result).toBe(true);
+      expect(mockSetUpdaterWindowVisible).toHaveBeenCalled();
+    });
+
+    test('Android returns false when version is not newer', async () => {
+      mockOsType.mockReturnValue('android');
+      mockAppVersion = '2.0.0';
+
+      mockTauriFetch.mockResolvedValue({
+        json: () =>
+          Promise.resolve({
+            version: '1.0.0',
+            platforms: { 'android-arm64': {} },
+          }),
+      });
+
+      const result = await checkForAppUpdates(dummyTranslate, false);
+
+      expect(result).toBe(false);
       expect(mockSetUpdaterWindowVisible).not.toHaveBeenCalled();
     });
 
-    test('is disabled regardless of channel', async () => {
-      const result = await checkForAppUpdates(dummyTranslate, true, 'nightly');
+    test('Android fetch failure throws error', async () => {
+      mockOsType.mockReturnValue('android');
+
+      mockTauriFetch.mockRejectedValue(new Error('Network error'));
+
+      await expect(checkForAppUpdates(dummyTranslate, false)).rejects.toThrow(
+        'Failed to fetch Android update info',
+      );
+    });
+
+    test('auto-check swallows Android update failure (READEST-22)', async () => {
+      mockOsType.mockReturnValue('android');
+      mockTauriFetch.mockRejectedValue(new Error('Network error'));
+
+      // Auto-check runs fire-and-forget on mount; a network failure must resolve
+      // false, not reject (which would become an unhandled rejection).
+      await expect(checkForAppUpdates(dummyTranslate, true)).resolves.toBe(false);
+    });
+
+    test('auto-check swallows desktop update failure (READEST-J)', async () => {
+      mockOsType.mockReturnValue('macos');
+      mockCheck.mockRejectedValue(
+        new Error('error sending request for url (releases/latest/download/latest.json)'),
+      );
+
+      await expect(checkForAppUpdates(dummyTranslate, true)).resolves.toBe(false);
+    });
+
+    test('returns false for unsupported OS types', async () => {
+      mockOsType.mockReturnValue('ios');
+
+      const result = await checkForAppUpdates(dummyTranslate, false);
 
       expect(result).toBe(false);
-      expect(mockCheck).not.toHaveBeenCalled();
+    });
+
+    test('stores check timestamp in localStorage', async () => {
+      mockOsType.mockReturnValue('macos');
+      mockCheck.mockResolvedValue(null);
+
+      const before = Date.now();
+      await checkForAppUpdates(dummyTranslate, false);
+      const after = Date.now();
+
+      const stored = parseInt(localStorage.getItem('lastAppUpdateCheck')!, 10);
+      expect(stored).toBeGreaterThanOrEqual(before);
+      expect(stored).toBeLessThanOrEqual(after);
+    });
+
+    test('nightly channel resolves and opens the updater window', async () => {
+      const past = Date.now() - 86400 * 1000 - 1000;
+      localStorage.setItem('lastAppUpdateCheck', past.toString());
+      mockOsType.mockReturnValue('macos');
+      mockOsArch.mockReturnValue('aarch64');
+      mockAppVersion = '0.11.4';
+      mockTauriFetch.mockImplementation(async (url: string) =>
+        url.includes('nightly')
+          ? {
+              ok: true,
+              json: async () => ({
+                version: '0.11.4-2026061406',
+                platforms: { 'darwin-aarch64': { url: 'u', signature: 's' } },
+              }),
+            }
+          : {
+              ok: true,
+              json: async () => ({
+                version: '0.11.4',
+                platforms: { 'darwin-aarch64': { url: 'u', signature: 's' } },
+              }),
+            },
+      );
+      mockIsTauriAppPlatform = true;
+
+      const result = await checkForAppUpdates(dummyTranslate, false, 'nightly');
+
+      expect(result).toBe(true);
+      expect(mockCheck).not.toHaveBeenCalled(); // isolated from Tauri check()
+      expect(mockSetUpdaterWindowVisible).toHaveBeenCalled();
     });
   });
 
-  // ── checkAppReleaseNotes (disabled on the Izum StoryFlow fork) ──
+  // ── checkAppReleaseNotes ───────────────────────────────────────
   describe('checkAppReleaseNotes', () => {
-    test('is disabled: never fetches or shows release notes', async () => {
-      const result = await checkAppReleaseNotes(false);
+    test('shows release notes when current version is newer than last shown', async () => {
+      mockAppVersion = '2.0.0';
+      setLastShownReleaseNotesVersion('1.0.0');
+
+      const mockFetchFn = vi.fn().mockResolvedValue({ ok: true });
+      vi.stubGlobal('fetch', mockFetchFn);
+
+      const result = await checkAppReleaseNotes(true);
+
+      expect(result).toBe(true);
+      expect(mockSetUpdaterWindowVisible).toHaveBeenCalledWith(true, '2.0.0', '1.0.0', false);
+    });
+
+    test('returns false when current version equals last shown', async () => {
+      mockAppVersion = '1.0.0';
+      setLastShownReleaseNotesVersion('1.0.0');
+
+      const result = await checkAppReleaseNotes(true);
 
       expect(result).toBe(false);
-      expect(mockSetUpdaterWindowVisible).not.toHaveBeenCalled();
-      expect(mockTauriFetch).not.toHaveBeenCalled();
+    });
+
+    test('sets current version as last shown when no previous version recorded', async () => {
+      mockAppVersion = '1.5.0';
+
+      const result = await checkAppReleaseNotes(true);
+
+      expect(result).toBe(false);
+      expect(getLastShownReleaseNotesVersion()).toBe('1.5.0');
+    });
+
+    test('shows release notes when isAutoCheck is false regardless of version comparison', async () => {
+      mockAppVersion = '1.0.0';
+      setLastShownReleaseNotesVersion('1.0.0');
+
+      const mockFetchFn = vi.fn().mockResolvedValue({ ok: true });
+      vi.stubGlobal('fetch', mockFetchFn);
+
+      const result = await checkAppReleaseNotes(false);
+
+      expect(result).toBe(true);
+      expect(mockSetUpdaterWindowVisible).toHaveBeenCalled();
+    });
+
+    test('returns false when fetch fails', async () => {
+      mockAppVersion = '2.0.0';
+      setLastShownReleaseNotesVersion('1.0.0');
+
+      const mockFetchFn = vi.fn().mockRejectedValue(new Error('Network error'));
+      vi.stubGlobal('fetch', mockFetchFn);
+
+      const result = await checkAppReleaseNotes(true);
+
+      expect(result).toBe(false);
+    });
+
+    test('returns false when fetch response is not ok', async () => {
+      mockAppVersion = '2.0.0';
+      setLastShownReleaseNotesVersion('1.0.0');
+
+      const mockFetchFn = vi.fn().mockResolvedValue({ ok: false });
+      vi.stubGlobal('fetch', mockFetchFn);
+
+      const result = await checkAppReleaseNotes(true);
+
+      expect(result).toBe(false);
+    });
+
+    test('uses tauri fetch when on tauri platform', async () => {
+      mockIsTauriAppPlatform = true;
+      mockAppVersion = '2.0.0';
+      setLastShownReleaseNotesVersion('1.0.0');
+
+      mockTauriFetch.mockResolvedValue({ ok: true });
+
+      const result = await checkAppReleaseNotes(true);
+
+      expect(result).toBe(true);
+      expect(mockTauriFetch).toHaveBeenCalledWith('https://example.com/release-notes.json');
     });
   });
 

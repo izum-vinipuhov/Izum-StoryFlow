@@ -62,3 +62,6 @@ fastlane/metadata-play/android/en-US/changelogs
 
 apps/readest.koplugin/bin/
 apps/readest.koplugin/native/localsend-bin/target/
+
+# Windows NUL artifact (produced by redirected commands on Windows)
+/NUL
