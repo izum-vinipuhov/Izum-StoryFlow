@@ -527,7 +527,10 @@ jobs:
 
       - uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # v1.0.0
         id: tauri
-        if: matrix.config.release != 'android'
+        # macOS is built by the direct step below: tauri-action's Apple flow
+        # chokes on the unset (empty) APPLE_* secrets and dies in
+        # "failed to import keychain certificate" even for an unsigned build.
+        if: matrix.config.release != 'android' && matrix.config.release != 'macos'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_BUNDLER_NEW_APPIMAGE_FORMAT: 'true'
@@ -549,6 +552,44 @@ jobs:
           releaseId: ${{ needs.get-release.outputs.release_id }}
           releaseBody: ${{ needs.get-release.outputs.release_note }}
           args: ${{ matrix.config.args || '' }}
+
+      - name: build and upload unsigned macOS dmg
+        if: matrix.config.release == 'macos'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Updater artifacts (.sig) need the minisign key; codesigning is not
+          # touched: without a signing identity the bundler ad-hoc-signs the
+          # arm64 slice, which is all an unsigned build needs to launch.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          NODE_OPTIONS: '--max-old-space-size=8192'
+        run: |
+          cd apps/readest-app/
+          version=${{ needs.get-release.outputs.release_version }}
+          pnpm tauri build --target universal-apple-darwin --bundles dmg
+          bundle_dir=target/universal-apple-darwin/release/bundle/dmg
+          # Space-free asset name: keeps latest.json download URLs clean.
+          dmg="IzumStoryFlow_${version}_universal.dmg"
+          mv "$(ls "$bundle_dir"/*.dmg | head -1)" "$dmg"
+          mv "$(ls "$bundle_dir"/*.dmg.sig | head -1)" "$dmg.sig"
+          echo "Uploading $dmg to GitHub release"
+          gh release upload ${{ needs.get-release.outputs.release_tag }} "$dmg" "$dmg.sig" --clobber
+
+          # Merge darwin entries into latest.json (same bootstrap as the other legs).
+          if ! curl -fsSL https://github.com/izum-vinipuhov/Izum-StoryFlow/releases/latest/download/latest.json -o latest.json; then
+            echo '{"version":"","pub_date":"","notes":"","platforms":{}}' > latest.json
+          elif ! jq empty latest.json 2>/dev/null; then
+            echo "::error::Existing latest.json is not valid JSON; aborting."
+            exit 1
+          fi
+          dmg_url="https://github.com/izum-vinipuhov/Izum-StoryFlow/releases/download/${{ needs.get-release.outputs.release_tag }}/${dmg}"
+          dmg_sig=$(cat "$dmg.sig")
+          jq --arg url "$dmg_url" --arg sig "$dmg_sig" \
+            '.platforms["darwin-aarch64"] = {signature: $sig, url: $url}
+             | .platforms["darwin-x86_64"] = {signature: $sig, url: $url}' \
+            latest.json > tmp.$$.json && mv tmp.$$.json latest.json
+          echo "Uploading updated latest.json to GitHub release"
+          gh release upload ${{ needs.get-release.outputs.release_tag }} latest.json --clobber
 
       # Attest the freshly built desktop bundles (installers, AppImage, dmg,
       # updater archives + their .sig). tauri-action reports their on-disk paths
