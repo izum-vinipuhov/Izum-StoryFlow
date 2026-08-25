@@ -125,7 +125,7 @@ services:
 
   client:
     container_name: readest-client
-    image: ${READEST_IMAGE:-ghcr.io/readest/readest:latest}
+    image: ${READEST_IMAGE:-ghcr.io/izum-vinipuhov/izum-story-flow:latest}
     pull_policy: missing
     restart: unless-stopped
     ports:

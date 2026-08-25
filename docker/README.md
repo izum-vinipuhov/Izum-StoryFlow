@@ -4,7 +4,7 @@
 
 | service         | Image                       | Description                                       |
 | --------------- | --------------------------- | ------------------------------------------------- |
-| **client**      | `ghcr.io/readest/readest`   | readest frontend                                  |
+| **client**      | `ghcr.io/izum-vinipuhov/izum-story-flow`   | Izum StoryFlow frontend                                  |
 | **db**          | `supabase/postgres`         | psql db with supabase extensions                  |
 | **kong**        | `kong:2.8.1`                | api gateway routing requests to supabase services |
 | **auth**        | `supabase/gotrue:v2.185.0`  | auth service (email, JWT)                         |
@@ -49,7 +49,7 @@ cd docker
 docker compose up -d
 ```
 
-this pulls `${READEST_IMAGE}` (default: `ghcr.io/readest/readest:latest`) instead of building the client locally.
+this pulls `${READEST_IMAGE}` (default: `ghcr.io/izum-vinipuhov/izum-story-flow:latest`) instead of building the client locally.
 the web client now reads `SUPABASE_PUBLIC_URL`, `SUPABASE_ANON_KEY`, `API_BASE_URL`, `OBJECT_STORAGE_TYPE`, `STORAGE_FIXED_QUOTA`, `TRANSLATION_FIXED_QUOTA`, and `PREMIUM_ENABLED` from runtime
 container env, so custom self-hosted values work with pulled images.
 `PREMIUM_ENABLED=true` treats every account as the pro plan: cloud sync,
