@@ -65,3 +65,6 @@ apps/readest.koplugin/native/localsend-bin/target/
 
 # Windows NUL artifact (produced by redirected commands on Windows)
 /NUL
+
+# Yandex Books token obtained by get_yandex_token.py
+/token.txt

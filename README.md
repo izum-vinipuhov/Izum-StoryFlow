@@ -2,6 +2,9 @@
   <a href="./README_RU.md">
     <img src="https://img.shields.io/badge/Русский-README_RU.md-005FF9?style=for-the-badge" alt="Читать на русском" />
   </a>
+  <a href="#get-yandex-token">
+    <img src="https://img.shields.io/badge/Get_Yandex_Token-script-FFCC00?style=for-the-badge" alt="Get Yandex Token" />
+  </a>
 </div>
 
 <div align="center">
@@ -43,7 +46,21 @@ Download a book, an audiobook, or book + audiobook:
 
 ### Downloading Audiobooks from Yandex Books
 
-**1. Set your Yandex token**
+**1. Get your Yandex token**
+
+<a id="get-yandex-token"></a>
+
+Downloading from Yandex Books requires a Yandex account token. To get one, run the helper script:
+
+`python get_token.py`
+
+(requires `pywebview`: `pip install pywebview`)
+
+- A Yandex sign-in window opens — sign in the usual way (QR code works too)
+- After signing in, the token is saved to `token.txt` next to the script and printed to the console
+- If the token expires (a 401 error in the app), just run the script again
+
+**2. Set your Yandex token**
 
 Open the menu, click the gear button, and the **Yandex Token** window will open. Enter your Yandex token and confirm:
 
@@ -51,7 +68,7 @@ Open the menu, click the gear button, and the **Yandex Token** window will open.
   <img src="./data/screenshots/yandex_token.jpg" alt="Yandex Token" width="620" />
 </p>
 
-**2. Download a book**
+**3. Download a book**
 
 Open the menu and paste the book link, press **Search**, then choose to download the book, the audiobook, or book + audiobook:
 
@@ -59,7 +76,7 @@ Open the menu and paste the book link, press **Search**, then choose to download
   <img src="./data/screenshots/yandex_url.jpg" alt="Yandex URL" width="520" />
 </p>
 
-**3. Track your downloads**
+**4. Track your downloads**
 
 Open the menu and find the **Yandex Downloads** button:
 
