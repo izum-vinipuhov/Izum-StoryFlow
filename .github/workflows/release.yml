@@ -296,19 +296,18 @@ jobs:
             release: linux
             arch: aarch64
             rust_target: aarch64-unknown-linux-gnu
-          # macOS is suspended until the Izum StoryFlow fork has its own Apple
-          # Developer ID certificate + provisioning profile: the upstream
-          # ReadestDeveloperID.provisionprofile in src-tauri/profiles/ cannot
-          # sign this app, and APPLE_* secrets are not set yet. Restore this
-          # entry (and the APPLE_* secrets) when Apple signing is available.
-          # - os: macos-latest
-          #   release: macos
-          #   arch: aarch64
-          #   rust_target: x86_64-apple-darwin,aarch64-apple-darwin
-          #   # --config layers the iCloud overlay (Developer ID provisioning
-          #   # profile + entitlements) onto the direct-distribution build; see
-          #   # src-tauri/tauri.macos-nonestore.conf.json.
-          #   args: '--target universal-apple-darwin --config src-tauri/tauri.macos-nonestore.conf.json'
+          # Unsigned macOS build: the fork has no Apple Developer ID yet, and
+          # the tauri.macos-nonestore.conf.json overlay would embed upstream's
+          # ReadestDeveloperID.provisionprofile (which cannot sign this app).
+          # The bare build ad-hoc-signs the arm64 slice (required by Apple
+          # Silicon); Gatekeeper shows the right-click > Open prompt, which is
+          # acceptable until a Developer ID is set up. iCloud sync stays off
+          # until then (the overlay is what enabled it).
+          - os: macos-latest
+            release: macos
+            arch: aarch64
+            rust_target: x86_64-apple-darwin,aarch64-apple-darwin
+            args: '--target universal-apple-darwin --bundles dmg'
           - os: windows-latest
             release: windows
             arch: x86_64
