@@ -77,6 +77,7 @@ const toCategory = (id: string): SyncCategory | null => {
   if (id === 'config') return 'progress';
   if (id === 'books') return 'book';
   if (id === 'notes') return 'note';
+  if (id === 'shelves') return 'shelf';
   return null;
 };
 
@@ -119,6 +120,7 @@ const PROVIDER_GATED_CATEGORIES: ReadonlySet<SyncCategory> = new Set([
   'book',
   'progress',
   'note',
+  'shelf',
 ] as SyncCategory[]);
 
 export const isSyncCategoryEnabled = (id: string): boolean => {

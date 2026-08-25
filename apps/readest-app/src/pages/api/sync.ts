@@ -14,6 +14,9 @@ import {
   SyncType,
   StatBookRecord,
   StatPageRecord,
+  ShelfBookRecord,
+  ShelfIdMapping,
+  ShelfRecord,
 } from '@/libs/sync';
 import { validateUserAndToken } from '@/utils/access';
 import { DBBook, DBBookConfig } from '@/types/records';
@@ -67,6 +70,84 @@ export function pickWinningPages(
     if (!existing || rec.duration > existing.duration) toUpsert.push(rec);
   }
   return { toUpsert };
+}
+
+const shelfMs = (s?: string | null): number => (s ? new Date(s).getTime() : 0);
+const normalizeShelfServerName = (name: string): string => name.trim().toLowerCase();
+
+/**
+ * LWW decide per incoming shelf row, with name-merge: an incoming row whose id
+ * is unknown on the server but whose normalized name matches an ACTIVE server
+ * shelf is merged into that shelf (the canonical one keeps its id); the
+ * incoming row itself is not stored. A fresher incoming tombstone tombstones
+ * the canonical; a fresher incoming rename updates the canonical's name.
+ * Emits idMappings so the pushing client can rewrite its local id.
+ */
+export function resolveShelfNameMerge(
+  incoming: ShelfRecord[],
+  serverRows: ShelfRecord[],
+): { toInsert: ShelfRecord[]; toUpdate: ShelfRecord[]; idMappings: ShelfIdMapping[] } {
+  const byId = new Map(serverRows.map((row) => [row.id, row]));
+  const byName = new Map<string, ShelfRecord>();
+  for (const row of serverRows) {
+    // Tombstones don't claim names: a deleted shelf's name is free for reuse.
+    if (row.deleted_at) continue;
+    const key = normalizeShelfServerName(row.name);
+    if (!byName.has(key)) byName.set(key, row);
+  }
+
+  const toInsert: ShelfRecord[] = [];
+  const toUpdate: ShelfRecord[] = [];
+  const idMappings: ShelfIdMapping[] = [];
+
+  for (const row of incoming) {
+    const server = byId.get(row.id);
+    if (server) {
+      const clientIsNewer =
+        shelfMs(row.deleted_at) > shelfMs(server.deleted_at) ||
+        shelfMs(row.updated_at) > shelfMs(server.updated_at);
+      if (clientIsNewer) toUpdate.push(row);
+      continue;
+    }
+    const canonical = byName.get(normalizeShelfServerName(row.name));
+    if (!canonical) {
+      toInsert.push(row);
+      continue;
+    }
+    idMappings.push({ localId: row.id, serverId: canonical.id });
+    if (shelfMs(row.deleted_at) > shelfMs(canonical.updated_at)) {
+      // The user deleted this shelf on the client; delete the canonical too.
+      toUpdate.push({ ...canonical, deleted_at: row.deleted_at, updated_at: row.updated_at });
+    } else if (shelfMs(row.updated_at) > shelfMs(canonical.updated_at)) {
+      // Fresher rename wins; keep the canonical id.
+      toUpdate.push({ ...canonical, name: row.name, updated_at: row.updated_at });
+    }
+  }
+  return { toInsert, toUpdate, idMappings };
+}
+
+/** LWW per (shelf_id, book_hash) membership key. Deletes win only through a
+ * fresher tombstone; rows from different devices otherwise coexist (union). */
+export function resolveShelfBookMerge(
+  incoming: ShelfBookRecord[],
+  serverRows: ShelfBookRecord[],
+): { toInsert: ShelfBookRecord[]; toUpdate: ShelfBookRecord[] } {
+  const key = (row: ShelfBookRecord) => `${row.shelf_id}|${row.book_hash}`;
+  const byKey = new Map(serverRows.map((row) => [key(row), row]));
+  const toInsert: ShelfBookRecord[] = [];
+  const toUpdate: ShelfBookRecord[] = [];
+  for (const row of incoming) {
+    const server = byKey.get(key(row));
+    if (!server) {
+      toInsert.push(row);
+      continue;
+    }
+    const clientIsNewer =
+      shelfMs(row.deleted_at) > shelfMs(server.deleted_at) ||
+      shelfMs(row.updated_at) > shelfMs(server.updated_at);
+    if (clientIsNewer) toUpdate.push(row);
+  }
+  return { toInsert, toUpdate };
 }
 
 /**
@@ -290,7 +371,15 @@ export async function GET(req: NextRequest) {
   const sharedLibraryEnabled = isSharedLibraryEnabled();
 
   try {
-    const results: SyncResult = { books: [], configs: [], notes: [], statBooks: [], statPages: [] };
+    const results: SyncResult = {
+      books: [],
+      configs: [],
+      notes: [],
+      statBooks: [],
+      statPages: [],
+      shelves: [],
+      shelfBooks: [],
+    };
     const errors: Record<TableName, DBError | null> = {
       books: null,
       book_notes: null,
@@ -495,6 +584,46 @@ export async function GET(req: NextRequest) {
     if (!typeParam || typeParam === 'notes') {
       await queryTables('book_notes', ['id']).catch((err) => (errors['book_notes'] = err));
     }
+    if (!typeParam || typeParam === 'shelves') {
+      // Shelves + shelf_books: the pull cursor is the trigger-stamped
+      // `synced_at` (same rationale as books, #4678) — a server-side
+      // name-merge propagates to peers without touching updated_at. Small
+      // per-user data: full delta, ordered ascending for a stable cursor.
+      const PAGE = 1000;
+      const fetchAll = async (table: 'shelves' | 'shelf_books') => {
+        const all: Record<string, unknown>[] = [];
+        let offset = 0;
+        for (;;) {
+          const { data, error } = await supabase
+            .from(table)
+            .select('*')
+            .eq('user_id', user.id)
+            .gt('synced_at', sinceIso)
+            .order('synced_at', { ascending: true })
+            .range(offset, offset + PAGE - 1);
+          if (error) return { error };
+          const rows = (data ?? []) as Record<string, unknown>[];
+          all.push(...rows);
+          if (rows.length < PAGE) break;
+          offset += PAGE;
+        }
+        return { data: all };
+      };
+      const shelvesPull = await fetchAll('shelves');
+      const shelfBooksPull = await fetchAll('shelf_books');
+      if (shelvesPull.error)
+        return NextResponse.json(
+          { error: `shelves: ${shelvesPull.error.message || 'Unknown error'}` },
+          { status: 500 },
+        );
+      if (shelfBooksPull.error)
+        return NextResponse.json(
+          { error: `shelf_books: ${shelfBooksPull.error.message || 'Unknown error'}` },
+          { status: 500 },
+        );
+      results.shelves = shelvesPull.data as unknown as ShelfRecord[];
+      results.shelfBooks = shelfBooksPull.data as unknown as ShelfBookRecord[];
+    }
     if (!typeParam || typeParam === 'stats') {
       // PostgREST caps responses at ~1000 rows; stat_pages grows one row per page
       // event, so page through both tables (ordered by updated_at ascending for a
@@ -627,7 +756,15 @@ export async function POST(req: NextRequest) {
   const supabase = createSupabaseClient(token);
   await ensureSharedLibraryMode();
   const body = await req.json();
-  const { books = [], configs = [], notes = [], statBooks = [], statPages = [] } = body as SyncData;
+  const {
+    books = [],
+    configs = [],
+    notes = [],
+    statBooks = [],
+    statPages = [],
+    shelves = [],
+    shelfBooks = [],
+  } = body as SyncData;
 
   const BATCH_SIZE = 100;
   const upsertRecords = async (
@@ -890,6 +1027,103 @@ export async function POST(req: NextRequest) {
     if (configsResult?.error) throw new Error(configsResult.error);
     if (notesResult?.error) throw new Error(notesResult.error);
 
+    // --- Shelves push: LWW by id + name-merge (see resolveShelfNameMerge).
+    // Any failure here fails the whole push, so the client keeps the rows
+    // dirty and retries on the next sync cycle. ---
+    let shelfIdMappings: ShelfIdMapping[] = [];
+    if (shelves.length > 0) {
+      const { data: serverShelves, error: shelvesFetchError } = await supabase
+        .from('shelves')
+        .select('*')
+        .eq('user_id', user.id);
+      if (shelvesFetchError) throw new Error(`shelves: ${shelvesFetchError.message}`);
+      const merge = resolveShelfNameMerge(shelves, (serverShelves ?? []) as ShelfRecord[]);
+      shelfIdMappings = merge.idMappings;
+      const toDb = (rows: ShelfRecord[]) =>
+        rows.map((row) => ({
+          user_id: user.id,
+          id: row.id,
+          name: row.name,
+          created_at: row.created_at ?? new Date().toISOString(),
+          updated_at: row.updated_at ?? new Date().toISOString(),
+          deleted_at: row.deleted_at ?? null,
+        }));
+      if (merge.toInsert.length > 0) {
+        const { error } = await supabase.from('shelves').insert(toDb(merge.toInsert));
+        if (error) throw new Error(`shelves: ${error.message}`);
+      }
+      if (merge.toUpdate.length > 0) {
+        const { error } = await supabase
+          .from('shelves')
+          .upsert(toDb(merge.toUpdate), { onConflict: 'user_id,id' });
+        if (error) throw new Error(`shelves: ${error.message}`);
+      }
+    }
+
+    if (shelfBooks.length > 0) {
+      // Re-point memberships onto the canonical shelf id before writing.
+      const mapped = shelfBooks.map((row) => {
+        const mapping = shelfIdMappings.find((m) => m.localId === row.shelf_id);
+        return mapping ? { ...row, shelf_id: mapping.serverId } : row;
+      });
+      for (let i = 0; i < mapped.length; i += BATCH_SIZE) {
+        const batch = mapped.slice(i, i + BATCH_SIZE);
+        const orConditions = batch
+          .map(
+            (row) =>
+              `and(user_id.eq.${user.id},shelf_id.eq.${row.shelf_id},book_hash.eq.${row.book_hash})`,
+          )
+          .join(',');
+        const { data: serverRows, error: fetchError } = await supabase
+          .from('shelf_books')
+          .select('*')
+          .or(orConditions);
+        if (fetchError) throw new Error(`shelf_books: ${fetchError.message}`);
+        const { toInsert, toUpdate } = resolveShelfBookMerge(
+          batch,
+          (serverRows ?? []) as ShelfBookRecord[],
+        );
+        const toDb = (rows: ShelfBookRecord[]) =>
+          rows.map((row) => ({
+            user_id: user.id,
+            shelf_id: row.shelf_id,
+            book_hash: row.book_hash,
+            created_at: row.created_at ?? new Date().toISOString(),
+            updated_at: row.updated_at ?? new Date().toISOString(),
+            deleted_at: row.deleted_at ?? null,
+          }));
+        if (toInsert.length > 0) {
+          const { error } = await supabase.from('shelf_books').insert(toDb(toInsert));
+          if (error) throw new Error(`shelf_books: ${error.message}`);
+        }
+        if (toUpdate.length > 0) {
+          const { error } = await supabase
+            .from('shelf_books')
+            .upsert(toDb(toUpdate), { onConflict: 'user_id,shelf_id,book_hash' });
+          if (error) throw new Error(`shelf_books: ${error.message}`);
+        }
+      }
+    }
+
+    // Authoritative post-merge rows, returned so the pushing client can
+    // rewrite ids and clear dirty flags in one round-trip.
+    let authoritativeShelves: ShelfRecord[] = [];
+    let authoritativeShelfBooks: ShelfBookRecord[] = [];
+    if (shelves.length > 0 || shelfBooks.length > 0) {
+      const { data: shelvesData, error: shelvesError } = await supabase
+        .from('shelves')
+        .select('*')
+        .eq('user_id', user.id);
+      if (shelvesError) throw new Error(`shelves: ${shelvesError.message}`);
+      const { data: shelfBooksData, error: shelfBooksError } = await supabase
+        .from('shelf_books')
+        .select('*')
+        .eq('user_id', user.id);
+      if (shelfBooksError) throw new Error(`shelf_books: ${shelfBooksError.message}`);
+      authoritativeShelves = (shelvesData ?? []) as ShelfRecord[];
+      authoritativeShelfBooks = (shelfBooksData ?? []) as ShelfBookRecord[];
+    }
+
     // Piggyback the per-book reading progress from the configs push onto the
     // matching `books` row. Other devices' library pull-to-refresh reads
     // books.progress + books.updated_at, so without this the row would stay
@@ -1008,6 +1242,9 @@ export async function POST(req: NextRequest) {
         books: booksResult?.data || [],
         configs: configsResult?.data || [],
         notes: notesResult?.data || [],
+        shelves: authoritativeShelves,
+        shelfBooks: authoritativeShelfBooks,
+        shelfIdMappings,
       },
       { status: 200 },
     );

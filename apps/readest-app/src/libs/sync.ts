@@ -5,12 +5,42 @@ import { fetchWithTimeout } from '@/utils/fetch';
 
 const SYNC_API_ENDPOINT = getAPIBaseUrl() + '/sync';
 
-export type SyncType = 'books' | 'configs' | 'notes' | 'stats';
+export type SyncType = 'books' | 'configs' | 'notes' | 'stats' | 'shelves';
 export type SyncOp = 'push' | 'pull' | 'both';
 
 interface BookRecord extends BookDataRecord, Book {}
 interface BookConfigRecord extends BookDataRecord, BookConfig {}
 interface BookNoteRecord extends BookDataRecord, BookNote {}
+
+export interface ShelfRecord {
+  user_id?: string;
+  id: string;
+  name: string;
+  created_at?: string;
+  updated_at?: string;
+  updated_at_ms?: number; // epoch ms, attached by the GET response for cursor math
+  deleted_at?: string | null;
+  /** Server-stamped pull cursor (see set_shelves_synced_at, issue #4678). */
+  synced_at?: string | null;
+}
+
+export interface ShelfBookRecord {
+  user_id?: string;
+  shelf_id: string;
+  book_hash: string;
+  created_at?: string;
+  updated_at?: string;
+  updated_at_ms?: number; // epoch ms, attached by the GET response for cursor math
+  deleted_at?: string | null;
+  /** Server-stamped pull cursor (see set_shelves_synced_at, issue #4678). */
+  synced_at?: string | null;
+}
+
+/** Server-side name-merge results: local shelf ids to rewrite onto server ids. */
+export interface ShelfIdMapping {
+  localId: string;
+  serverId: string;
+}
 
 export interface StatBookRecord {
   user_id?: string;
@@ -41,6 +71,9 @@ export interface SyncResult {
   configs: BookConfigRecord[] | null;
   statBooks?: StatBookRecord[] | null;
   statPages?: StatPageRecord[] | null;
+  shelves?: ShelfRecord[] | null;
+  shelfBooks?: ShelfBookRecord[] | null;
+  shelfIdMappings?: ShelfIdMapping[] | null;
 }
 
 export type SyncRecord = BookRecord & BookConfigRecord & BookNoteRecord;
@@ -51,6 +84,8 @@ export interface SyncData {
   configs?: Partial<BookConfigRecord>[];
   statBooks?: StatBookRecord[];
   statPages?: StatPageRecord[];
+  shelves?: ShelfRecord[];
+  shelfBooks?: ShelfBookRecord[];
 }
 
 export class SyncClient {

@@ -48,6 +48,7 @@ export const BACKUP_SETTINGS_BLACKLIST = [
   'lastSyncedAtBooks',
   'lastSyncedAtConfigs',
   'lastSyncedAtNotes',
+  'lastSyncedAtShelves',
   'lastSyncedAtReplicas',
   'readwise.lastSyncedAt',
   'hardcover.lastSyncedAt',
