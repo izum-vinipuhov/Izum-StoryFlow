@@ -6,7 +6,7 @@
 # `<base>-<YYYYMMDDHH>` (Asia/Shanghai), (2) publishes to Cloudflare R2 only (no
 # GitHub release), and (3) assembles `nightly/latest.json` race-free from
 # per-leg manifest fragments so a single failing leg never clobbers the manifest.
-name: Nightly Readest
+name: Nightly Izum StoryFlow
 
 on:
   schedule:

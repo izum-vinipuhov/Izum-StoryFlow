@@ -1,4 +1,4 @@
-name: Release Readest
+name: Release Izum StoryFlow
 
 on:
   workflow_dispatch:
