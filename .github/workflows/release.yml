@@ -566,14 +566,20 @@ jobs:
         run: |
           cd apps/readest-app/
           version=${{ needs.get-release.outputs.release_version }}
-          pnpm tauri build --target universal-apple-darwin --bundles dmg
-          bundle_dir=target/universal-apple-darwin/release/bundle/dmg
-          # Space-free asset name: keeps latest.json download URLs clean.
+          # `app` is the updater-enabled macOS target (produces the .tar.gz +
+          # .sig the updater consumes); the dmg is for manual installs.
+          # Neither is codesigned (no Developer ID yet): the linker ad-hoc-
+          # signs the arm64 slice, which is all an unsigned build needs.
+          pnpm tauri build --target universal-apple-darwin --bundles dmg,app
+          cd ../..
+          # Space-free asset names: keeps latest.json download URLs clean.
           dmg="IzumStoryFlow_${version}_universal.dmg"
-          mv "$(ls "$bundle_dir"/*.dmg | head -1)" "$dmg"
-          mv "$(ls "$bundle_dir"/*.dmg.sig | head -1)" "$dmg.sig"
-          echo "Uploading $dmg to GitHub release"
-          gh release upload ${{ needs.get-release.outputs.release_tag }} "$dmg" "$dmg.sig" --clobber
+          tar_gz="IzumStoryFlow_${version}_universal.app.tar.gz"
+          mv target/universal-apple-darwin/release/bundle/dmg/*.dmg "$dmg"
+          mv target/universal-apple-darwin/release/bundle/macos/*.app.tar.gz "$tar_gz"
+          mv target/universal-apple-darwin/release/bundle/macos/*.app.tar.gz.sig "$tar_gz.sig"
+          echo "Uploading macOS artifacts to GitHub release"
+          gh release upload ${{ needs.get-release.outputs.release_tag }} "$dmg" "$tar_gz" "$tar_gz.sig" --clobber
 
           # Merge darwin entries into latest.json (same bootstrap as the other legs).
           if ! curl -fsSL https://github.com/izum-vinipuhov/Izum-StoryFlow/releases/latest/download/latest.json -o latest.json; then
@@ -582,9 +588,9 @@ jobs:
             echo "::error::Existing latest.json is not valid JSON; aborting."
             exit 1
           fi
-          dmg_url="https://github.com/izum-vinipuhov/Izum-StoryFlow/releases/download/${{ needs.get-release.outputs.release_tag }}/${dmg}"
-          dmg_sig=$(cat "$dmg.sig")
-          jq --arg url "$dmg_url" --arg sig "$dmg_sig" \
+          tar_gz_url="https://github.com/izum-vinipuhov/Izum-StoryFlow/releases/download/${{ needs.get-release.outputs.release_tag }}/${tar_gz}"
+          tar_gz_sig=$(cat "$tar_gz.sig")
+          jq --arg url "$tar_gz_url" --arg sig "$tar_gz_sig" \
             '.platforms["darwin-aarch64"] = {signature: $sig, url: $url}
              | .platforms["darwin-x86_64"] = {signature: $sig, url: $url}' \
             latest.json > tmp.$$.json && mv tmp.$$.json latest.json
