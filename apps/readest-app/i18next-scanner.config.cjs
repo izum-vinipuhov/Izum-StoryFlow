@@ -27,7 +27,7 @@ const options = {
   debug: false,
   sort: false,
   func: {
-    list: ['_'],
+    list: ['_', 'stubTranslation'],
     extensions: ['.js', '.jsx', '.ts', '.tsx'],
   },
   lngs,
