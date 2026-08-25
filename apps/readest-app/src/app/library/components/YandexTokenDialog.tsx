@@ -32,12 +32,19 @@ const YandexTokenDialog: React.FC = () => {
   const { settings } = useSettingsStore();
   const [isOpen, setIsOpen] = useState(false);
   const [token, setToken] = useState('');
+  // The input shows the stored token with its right half masked. Typing
+  // switches it to an editable draft so a saved token can never end up as
+  // its own masked rendering.
+  const [draft, setDraft] = useState('');
+  const [editing, setEditing] = useState(false);
 
   useEffect(() => {
     const handleCustomEvent = (event: CustomEvent) => {
       setIsOpen(event.detail.visible);
       if (event.detail.visible) {
         setToken(settings.yandexBooks?.accessToken ?? '');
+        setDraft('');
+        setEditing(false);
       }
     };
 
@@ -54,8 +61,15 @@ const YandexTokenDialog: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings.yandexBooks?.accessToken]);
 
+  const visibleHalf = Math.ceil(token.length / 2);
+  const maskedToken = token
+    ? token.slice(0, visibleHalf) + '•'.repeat(token.length - visibleHalf)
+    : '';
+  const inputValue = editing ? draft : maskedToken;
+  const effectiveToken = editing ? draft.trim() : token.trim();
+
   const handleSave = async () => {
-    await saveSysSettings(envConfig, 'yandexBooks', { accessToken: token.trim() });
+    await saveSysSettings(envConfig, 'yandexBooks', { accessToken: effectiveToken });
     eventDispatcher.dispatch('toast', {
       message: _('Yandex token saved'),
       type: 'success',
@@ -70,6 +84,8 @@ const YandexTokenDialog: React.FC = () => {
       type: 'success',
     });
     setToken('');
+    setDraft('');
+    setEditing(false);
   };
 
   return (
@@ -91,8 +107,11 @@ const YandexTokenDialog: React.FC = () => {
           autoComplete='off'
           className='input input-bordered eink-bordered placeholder:text-base-content/35 w-full'
           placeholder='y0_…'
-          value={token}
-          onChange={(e) => setToken(e.target.value)}
+          value={inputValue}
+          onChange={(e) => {
+            setDraft(e.target.value);
+            setEditing(true);
+          }}
         />
         <div className='flex justify-end gap-2 pt-1'>
           {token && (
@@ -115,7 +134,7 @@ const YandexTokenDialog: React.FC = () => {
             type='button'
             className='btn btn-contrast btn-sm'
             onClick={() => void handleSave()}
-            disabled={!token.trim()}
+            disabled={!effectiveToken}
           >
             {_('Save')}
           </button>

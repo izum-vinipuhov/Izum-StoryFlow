@@ -60,15 +60,28 @@ afterEach(() => {
 });
 
 describe('YandexTokenDialog', () => {
-  it('shows the stored token when opened', async () => {
+  it('shows the stored token with the left half visible and the right half masked', async () => {
     useSettingsStoreMock.mockReturnValue({
       settings: { yandexBooks: { accessToken: 'y0_stored' } },
     });
     render(<YandexTokenDialog />);
     setYandexTokenDialogVisible(true);
 
-    const input = (await screen.findByDisplayValue('y0_stored')) as HTMLInputElement;
+    const input = (await screen.findByDisplayValue('y0_st••••')) as HTMLInputElement;
     expect(input).toBeTruthy();
+  });
+
+  it('reveals the typed draft while editing', async () => {
+    useSettingsStoreMock.mockReturnValue({
+      settings: { yandexBooks: { accessToken: 'y0_stored' } },
+    });
+    render(<YandexTokenDialog />);
+    setYandexTokenDialogVisible(true);
+
+    const input = (await screen.findByRole('textbox')) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: 'y0_fresh' } });
+
+    expect(input.value).toBe('y0_fresh');
   });
 
   it('saves the entered token to yandexBooks settings', async () => {
