@@ -1,5 +1,10 @@
 """Авторизация в аккаунте Яндекс (Bookmate) и сохранение токена.
 
+Автор скрипта: kettle017/RU_Bookmate_downloader
+https://github.com/kettle017/RU_Bookmate_downloader
+
+Этот скрипт модифицирован для Izum StoryFlow.
+
 Запустите `python get_token.py` — откроется окно входа в Яндекс. После входа
 access_token сохранится в `token.txt` рядом со скриптом, откуда его читают и
 консольная версия (`RUBookmatedownloader.py`), и графический интерфейс
