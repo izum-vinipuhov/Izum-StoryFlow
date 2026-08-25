@@ -186,6 +186,46 @@ const migrations: Record<SchemaType, MigrationEntry[]> = {
       `,
     },
   ],
+  // User shelves: the shelves themselves plus their book memberships.
+  // `dirty` is the persistent offline sync queue — local mutations set it to 1
+  // and the sync loop clears it once the server confirms the row.
+  shelves: [
+    {
+      name: '2026081901_shelves_init',
+      sql: `
+        CREATE TABLE IF NOT EXISTS shelf (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          name_normalized TEXT NOT NULL,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL,
+          deleted_at INTEGER,
+          dirty INTEGER NOT NULL DEFAULT 1
+        );
+
+        -- Uniqueness applies to active shelves only: deleting a shelf frees
+        -- its name for reuse while the tombstone row stays for sync.
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_shelf_name_unique
+          ON shelf (name_normalized) WHERE deleted_at IS NULL;
+
+        CREATE TABLE IF NOT EXISTS shelf_books (
+          shelf_id TEXT NOT NULL,
+          book_hash TEXT NOT NULL,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL,
+          deleted_at INTEGER,
+          dirty INTEGER NOT NULL DEFAULT 1,
+          PRIMARY KEY (shelf_id, book_hash)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_shelf_dirty ON shelf (dirty);
+
+        CREATE INDEX IF NOT EXISTS idx_shelf_books_dirty ON shelf_books (dirty);
+
+        CREATE INDEX IF NOT EXISTS idx_shelf_books_book ON shelf_books (book_hash);
+      `,
+    },
+  ],
   reedy: [
     {
       name: '2026052601_reedy_init',

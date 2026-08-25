@@ -1,5 +1,18 @@
 import { SystemSettings } from '@/types/settings';
 import { applySyncBooksAutoEnable } from '@/services/sync/cloudSyncProvider';
+
+/**
+ * One-time settings migration for the shelves rework: the recently-read shelf
+ * is default-on now, so flip persisted "off" values on once. Returns true when
+ * the settings were mutated.
+ */
+export const enableRecentShelfMigration = (settings: SystemSettings): boolean => {
+  if (settings.libraryRecentShelfEnabled === false) {
+    settings.libraryRecentShelfEnabled = true;
+    return true;
+  }
+  return false;
+};
 import {
   AppPlatform,
   AppService,
@@ -80,7 +93,7 @@ export abstract class BaseAppService implements AppService {
   storefrontRegionCode: string | null = null;
   isOnlineCatalogsAccessible = true;
 
-  protected CURRENT_MIGRATION_VERSION = 20260706;
+  protected CURRENT_MIGRATION_VERSION = 20260820;
 
   protected abstract fs: FileSystem;
   protected abstract resolvePath(fp: string, base: BaseDir): ResolvedPath;
@@ -141,6 +154,26 @@ export abstract class BaseAppService implements AppService {
       } catch (error) {
         console.error('Error migrating to version 20260706:', error);
       }
+    }
+    if (lastMigrationVersion < 20260820 && settings) {
+      try {
+        this.migrate20260820(settings);
+      } catch (error) {
+        console.error('Error migrating to version 20260820:', error);
+      }
+    }
+  }
+
+  /**
+   * The recently-read shelf shipped hidden by default; the shelves rework
+   * makes it a default-on quick-resume strip. Flip persisted "off" settings
+   * on once so existing users see it too — the View menu toggle still works
+   * normally afterwards. Mutates the caller's settings snapshot, which the
+   * caller persists together with migrationVersion.
+   */
+  private migrate20260820(settings: SystemSettings): void {
+    if (enableRecentShelfMigration(settings)) {
+      console.log('Migration 20260820: enabled the recently-read shelf (new default).');
     }
   }
 

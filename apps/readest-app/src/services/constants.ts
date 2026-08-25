@@ -213,7 +213,8 @@ export const DEFAULT_SYSTEM_SETTINGS: Partial<SystemSettings> = {
   libraryAutoColumns: true,
   libraryColumns: 6,
   librarySkeuomorphicCovers: false,
-  libraryRecentShelfEnabled: false,
+  libraryRecentShelfEnabled: true,
+  libraryShelvesEnabled: true,
 
   metadataSeriesCollapsed: false,
   metadataOthersCollapsed: false,
@@ -245,6 +246,7 @@ export const DEFAULT_SYSTEM_SETTINGS: Partial<SystemSettings> = {
   lastSyncedAtBooks: 0,
   lastSyncedAtConfigs: 0,
   lastSyncedAtNotes: 0,
+  lastSyncedAtShelves: 0,
   lastSyncedAtReplicas: {},
   syncCategories: {
     book: true,

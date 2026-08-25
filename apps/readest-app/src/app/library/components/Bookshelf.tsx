@@ -70,6 +70,10 @@ import SetStatusAlert from './SetStatusAlert';
 import RecentShelf, { RECENT_SHELF_BOOK_COUNT } from './RecentShelf';
 import { useOpenBook } from '../hooks/useOpenBook';
 import LibrarySearchResults from './LibrarySearchResults';
+import ShelvesView from './ShelvesView';
+import AddToShelfDialog from './AddToShelfDialog';
+import { useShelvesStore } from '@/store/shelvesStore';
+import { resolveShelfBooks } from '../utils/shelves';
 
 export interface ContentSearchRequest {
   query: string;
@@ -93,6 +97,7 @@ interface BookshelfProps {
   handleSetSelectMode: (selectMode: boolean) => void;
   handleShowDetailsBook: (book: Book) => void;
   handleLibraryNavigation: (targetGroup: string) => void;
+  handleShelfNavigation: (targetShelfId: string) => void;
   handlePushLibrary: () => Promise<void>;
   booksTransferProgress: { [key: string]: number | null };
   contentSearch: ContentSearchRequest | null;
@@ -115,6 +120,12 @@ type BookshelfListContext = {
    * identity stable and does not reset its scroller on every Bookshelf render.
    */
   recentShelfHeader: React.ReactNode;
+  /**
+   * The «Библиотека» shelves block, rendered below the recently-read strip in
+   * the Virtuoso header. `null` when hidden (same identity rule as
+   * `recentShelfHeader`).
+   */
+  shelvesHeader: React.ReactNode;
   /**
    * Height (px) of the trailing Footer spacer. Defaults to the baseline
    * breathing room, but grows to clear the fixed select-mode action bar so the
@@ -167,7 +178,10 @@ const BookshelfLinearList: Components<unknown, BookshelfListContext>['List'] = R
 BookshelfLinearList.displayName = 'BookshelfLinearList';
 
 const BookshelfHeader = ({ context }: { context?: BookshelfListContext }) => (
-  <>{context?.recentShelfHeader ?? null}</>
+  <>
+    {context?.recentShelfHeader ?? null}
+    {context?.shelvesHeader ?? null}
+  </>
 );
 
 const GRID_VIRTUOSO_COMPONENTS: GridComponents<BookshelfListContext> = {
@@ -195,6 +209,7 @@ const Bookshelf: React.FC<BookshelfProps> = ({
   handleSetSelectMode,
   handleShowDetailsBook,
   handleLibraryNavigation,
+  handleShelfNavigation,
   handlePushLibrary,
   booksTransferProgress,
   contentSearch,
@@ -209,6 +224,7 @@ const Bookshelf: React.FC<BookshelfProps> = ({
   const { safeAreaInsets } = useThemeStore();
 
   const groupId = searchParams?.get('group') || '';
+  const shelfId = searchParams?.get('shelf') || '';
   const queryTerm = searchParams?.get('q')?.trim() || null;
   const viewMode = searchParams?.get('view') || settings.libraryViewMode;
   const storedSortBy = ensureLibrarySortByType(searchParams?.get('sort'), settings.librarySortBy);
@@ -288,9 +304,14 @@ const Bookshelf: React.FC<BookshelfProps> = ({
   }, [libraryBooks, queryTerm]);
 
   const manualGroupName = groupBy === LibraryGroupByType.Group ? getGroupName(groupId) : undefined;
+  const shelves = useShelvesStore((s) => s.shelves);
+  const memberships = useShelvesStore((s) => s.memberships);
   const currentShelfBooks = useMemo(
-    () => resolveCurrentShelfBooks(libraryBooks, groupBy, groupId, manualGroupName),
-    [libraryBooks, groupBy, groupId, manualGroupName],
+    () =>
+      shelfId
+        ? resolveShelfBooks(libraryBooks, shelfId, shelves, memberships)
+        : resolveCurrentShelfBooks(libraryBooks, groupBy, groupId, manualGroupName),
+    [libraryBooks, groupBy, groupId, manualGroupName, shelfId, shelves, memberships],
   );
   const filteredShelfBooks = useMemo(() => {
     const bookFilter = createBookFilter(queryTerm);
@@ -298,6 +319,11 @@ const Bookshelf: React.FC<BookshelfProps> = ({
   }, [currentShelfBooks, queryTerm]);
 
   const currentBookshelfItems = useMemo(() => {
+    // Inside a shelf the books are always flat — the existing sort controls
+    // apply, but folder/virtual grouping stays on the main library view.
+    if (shelfId) {
+      return filteredShelfBooks;
+    }
     if (groupBy === LibraryGroupByType.Group) {
       // Use existing generateBookshelfItems for group mode
       const groupName = manualGroupName || '';
@@ -309,15 +335,17 @@ const Bookshelf: React.FC<BookshelfProps> = ({
       if (groupId) return filteredShelfBooks;
       return createBookGroups(filteredShelfBooks, groupBy);
     }
-  }, [filteredShelfBooks, groupBy, groupId, manualGroupName]);
+  }, [filteredShelfBooks, groupBy, groupId, manualGroupName, shelfId]);
 
   useEffect(() => {
-    if (groupId && currentShelfBooks.length === 0) {
+    if (shelfId && currentShelfBooks.length === 0) {
+      updateUrlParams({ shelf: null });
+    } else if (groupId && currentShelfBooks.length === 0) {
       updateUrlParams({ group: null });
     } else {
       updateUrlParams({});
     }
-  }, [searchParams, groupId, currentShelfBooks.length, updateUrlParams]);
+  }, [searchParams, groupId, shelfId, currentShelfBooks.length, updateUrlParams]);
 
   const sortedBookshelfItems = useMemo(() => {
     const sortOrderMultiplier = sortOrder === 'asc' ? 1 : -1;
@@ -693,6 +721,7 @@ const Bookshelf: React.FC<BookshelfProps> = ({
 
   const { user } = useAuth();
   const [shareDialogBook, setShareDialogBook] = useState<Book | null>(null);
+  const [addToShelfBook, setAddToShelfBook] = useState<Book | null>(null);
 
   useEffect(() => {
     const handleShareIntent = (event: CustomEvent) => {
@@ -715,6 +744,17 @@ const Bookshelf: React.FC<BookshelfProps> = ({
       eventDispatcher.off('show-share-dialog', handleShareIntent);
     };
   }, [user, _]);
+
+  useEffect(() => {
+    const handleAddToShelfIntent = (event: CustomEvent) => {
+      const book = (event.detail as { book?: Book } | undefined)?.book;
+      if (book) setAddToShelfBook(book);
+    };
+    eventDispatcher.on('show-add-to-shelf-dialog', handleAddToShelfIntent);
+    return () => {
+      eventDispatcher.off('show-add-to-shelf-dialog', handleAddToShelfIntent);
+    };
+  }, []);
 
   // OverlayScrollbars + Virtuoso integration: Virtuoso manages its own
   // scroller; OverlayScrollbars wraps it for overlay scrollbar rendering.
@@ -822,6 +862,18 @@ const Bookshelf: React.FC<BookshelfProps> = ({
   const showRecentShelf =
     settings.libraryRecentShelfEnabled && !queryTerm && !groupId && recentBooks.length > 0;
 
+  // The «Библиотека» shelves block: hidden while searching, inside a
+  // group/shelf, or when the user turned the shelves mode off in ViewMenu.
+  const showShelvesView = settings.libraryShelvesEnabled && !queryTerm && !groupId && !shelfId;
+
+  const shelvesHeader = useMemo(
+    () =>
+      showShelvesView ? (
+        <ShelvesView books={libraryBooks} groupBy={groupBy} onOpenShelf={handleShelfNavigation} />
+      ) : null,
+    [showShelvesView, libraryBooks, groupBy, handleShelfNavigation],
+  );
+
   const recentShelfHeader = useMemo(
     () =>
       showRecentShelf ? (
@@ -873,6 +925,7 @@ const Bookshelf: React.FC<BookshelfProps> = ({
       autoColumns: settings.libraryAutoColumns,
       fixedColumns: settings.libraryColumns,
       recentShelfHeader,
+      shelvesHeader,
       showTimeRemaining,
       footerHeight,
     }),
@@ -880,6 +933,7 @@ const Bookshelf: React.FC<BookshelfProps> = ({
       settings.libraryAutoColumns,
       settings.libraryColumns,
       recentShelfHeader,
+      shelvesHeader,
       showTimeRemaining,
       footerHeight,
     ],
@@ -1129,6 +1183,11 @@ const Bookshelf: React.FC<BookshelfProps> = ({
         isOpen={!!shareDialogBook}
         book={shareDialogBook}
         onClose={() => setShareDialogBook(null)}
+      />
+      <AddToShelfDialog
+        isOpen={!!addToShelfBook}
+        book={addToShelfBook}
+        onClose={() => setAddToShelfBook(null)}
       />
     </div>
   );

@@ -124,6 +124,7 @@ describe('library context menu on Linux desktop (issue #5360)', () => {
     const labels = [
       'Select Book',
       'Group Books',
+      'Add to Shelf…',
       'Mark as Finished',
       'Mark as On hold',
       'Show Book Details',

@@ -326,7 +326,8 @@ export type SyncCategory =
   | 'opds_catalog'
   | 'settings'
   | 'credentials'
-  | 'stats';
+  | 'stats'
+  | 'shelf';
 
 export const SYNC_CATEGORIES: readonly SyncCategory[] = [
   'book',
@@ -338,6 +339,9 @@ export const SYNC_CATEGORIES: readonly SyncCategory[] = [
   'opds_catalog',
   'settings',
   'stats',
+  'shelf',
+  // Credentials stays last: it is the opt-in meta-toggle rendered as the
+  // final row of the Manage Sync panel.
   'credentials',
 ] as const;
 
@@ -445,6 +449,10 @@ export interface SystemSettings {
   librarySkeuomorphicCovers: boolean;
   /** Show the recently-read carousel at the top of the library (issue #3797). */
   libraryRecentShelfEnabled: boolean;
+  /** Show the «Библиотека» shelves block on the library page: system shelves
+   * (All books / Unread / Read), user shelves, and the auto shelves by author
+   * and genre. Defaults to true — shelves are the new default home. */
+  libraryShelvesEnabled: boolean;
   /**
    * Library page background texture, configured independently from the reader
    * background (issue #4743). When any of these is undefined the library
@@ -468,6 +476,7 @@ export interface SystemSettings {
   lastSyncedAtBooks: number;
   lastSyncedAtConfigs: number;
   lastSyncedAtNotes: number;
+  lastSyncedAtShelves: number;
 
   /**
    * App-lock PIN. When `pinCodeEnabled` is true, the user must enter

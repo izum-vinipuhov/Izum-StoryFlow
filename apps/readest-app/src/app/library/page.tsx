@@ -54,6 +54,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { useUICSS } from '@/hooks/useUICSS';
 import { useDemoBooks } from './hooks/useDemoBooks';
 import { useBooksSync } from './hooks/useBooksSync';
+import { useShelvesSync } from './hooks/useShelvesSync';
 import { useLibraryFileSync } from './hooks/useLibraryFileSync';
 import { useBookTransferActions } from './hooks/useBookTransferActions';
 import { useAutoImportFolders } from './hooks/useAutoImportFolders';
@@ -108,6 +109,7 @@ import {
   ensureLibraryGroupByType,
   findGroupById,
   getBreadcrumbs,
+  getRestoredLibraryParams,
 } from './utils/libraryUtils';
 import Spinner from '@/components/Spinner';
 import LibraryHeader from './components/LibraryHeader';
@@ -115,6 +117,9 @@ import Bookshelf from './components/Bookshelf';
 import LibraryEmptyState from './components/LibraryEmptyState';
 import ImportMenuPopup from './components/ImportMenuPopup';
 import GroupHeader from './components/GroupHeader';
+import ShelfHeader from './components/ShelfHeader';
+import { useShelvesStore } from '@/store/shelvesStore';
+import { buildShelfTiles } from './utils/shelves';
 import FailedImportsDialog, { FailedImport } from './components/FailedImportsDialog';
 import ImportFromFolderDialog, {
   ImportFromFolderResult,
@@ -314,6 +319,9 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
       | typeof LibraryGroupByType.Subject;
     groupName: string;
   } | null>(null);
+  const [currentShelf, setCurrentShelf] = useState<{ name: string; count: number } | null>(null);
+  const shelves = useShelvesStore((s) => s.shelves);
+  const memberships = useShelvesStore((s) => s.memberships);
   const [booksTransferProgress, setBooksTransferProgress] = useState<{
     [key: string]: number | null;
   }>({});
@@ -385,6 +393,7 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
   useTransferQueue(libraryLoaded);
 
   const { pullLibrary, pushLibrary } = useBooksSync();
+  useShelvesSync();
   // Library-scoped auto-sync for the active third-party cloud provider (WebDAV /
   // Google Drive): keeps library.json current on import / delete / book-close,
   // parity with useBooksSync. No-op when no provider is enabled.
@@ -436,10 +445,29 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
     },
   });
 
+  // Maintains the lastLibraryParams snapshot AND restores it once after a
+  // hard reload: the URL params are gone, but the snapshot in sessionStorage
+  // survives the refresh (it only lives until the tab closes). The restore
+  // must run here, in the snapshot's own effect, so it reads the previous
+  // session's value before the current (empty) URL clobbers it.
+  const restoredParamsRef = useRef(false);
   useEffect(() => {
     const snapshot = searchParams?.toString() || '';
     if (snapshot !== new URLSearchParams(window.location.search).toString()) return;
+    if (!restoredParamsRef.current && !snapshot) {
+      restoredParamsRef.current = true;
+      const restoredParams = getRestoredLibraryParams(
+        snapshot,
+        sessionStorage.getItem('lastLibraryParams'),
+      );
+      if (restoredParams) {
+        sessionStorage.removeItem('lastLibraryParams');
+        navigateToLibrary(router, restoredParams);
+        return;
+      }
+    }
     sessionStorage.setItem('lastLibraryParams', snapshot);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
   // Strip the empty `group=` param that `handleLibraryNavigation` sets as a
@@ -452,9 +480,17 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
   // another navigation.
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    if (searchParams?.get('group') !== '') return;
     const url = new URL(window.location.href);
-    url.searchParams.delete('group');
+    let changed = false;
+    if (searchParams?.get('group') === '') {
+      url.searchParams.delete('group');
+      changed = true;
+    }
+    if (searchParams?.get('shelf') === '') {
+      url.searchParams.delete('shelf');
+      changed = true;
+    }
+    if (!changed) return;
     const cleanHref = `${url.pathname}${url.search}${url.hash}`;
     window.history.replaceState(null, '', cleanHref);
   }, [searchParams]);
@@ -484,6 +520,25 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
       // Build query params — always `set` so the search string is non-empty
       // even when targetGroup is '' (the Next.js 16.2 workaround).
       params.set('group', targetGroup);
+      params.delete('shelf');
+
+      navigateToLibrary(router, `${params.toString()}`);
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [router],
+  );
+
+  // Shelf navigation mirrors group navigation: entering a shelf leaves the
+  // group view (and vice versa) so the two never stack.
+  const handleShelfNavigation = useCallback(
+    (targetShelfId: string) => {
+      const params = new URLSearchParams(window.location.search);
+
+      saveScrollPosition(params.get('group') || '');
+      document.documentElement.setAttribute('data-nav-direction', 'forward');
+
+      params.set('shelf', targetShelfId);
+      params.delete('group');
 
       navigateToLibrary(router, `${params.toString()}`);
     },
@@ -730,6 +785,8 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
       const appService = await envConfig.getAppService();
       const settings = await appService.loadSettings();
       setSettings(settings);
+      // Shelves live in their own SQLite DB; load them alongside the library.
+      void useShelvesStore.getState().load(appService);
 
       // Re-grant fs_scope / asset_protocol_scope for every external
       // library folder the user registered in a previous session, so
@@ -856,6 +913,33 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
       setCurrentVirtualGroup(null);
     }
   }, [libraryBooks, searchParams, settings.libraryGroupBy]);
+
+  // Track the current shelf for the navigation header (name + book count).
+  useEffect(() => {
+    const shelfId = searchParams?.get('shelf') || '';
+    if (!shelfId) {
+      setCurrentShelf(null);
+      return;
+    }
+    const tiles = buildShelfTiles(
+      libraryBooks.filter((book) => !book.deletedAt),
+      shelves,
+      memberships,
+    );
+    const tile =
+      tiles.system.find((t) => t.id === shelfId) ?? tiles.user.find((t) => t.id === shelfId);
+    const group =
+      tiles.authors.find((g) => g.id === shelfId) ?? tiles.subjects.find((g) => g.id === shelfId);
+    if (tile) {
+      // System shelf names are i18n keys; user shelf names are user data.
+      setCurrentShelf({ name: tile.kind === 'user' ? tile.name : _(tile.name), count: tile.count });
+    } else if (group) {
+      setCurrentShelf({ name: group.displayName || group.name, count: group.books.length });
+    } else {
+      setCurrentShelf(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [libraryBooks, searchParams, shelves, memberships]);
 
   useEffect(() => {
     if (demoBooks.length > 0 && libraryLoaded) {
@@ -2066,6 +2150,7 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
           groupName={currentVirtualGroup.groupName}
         />
       )}
+      {currentShelf && <ShelfHeader name={currentShelf.name} count={currentShelf.count} />}
       {showBookshelf &&
         (libraryBooks.some((book) => !book.deletedAt) ? (
           <div aria-label={_('Your Bookshelf')} className='flex min-h-0 flex-grow flex-col'>
@@ -2095,6 +2180,7 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
                 handleSetSelectMode={handleSetSelectMode}
                 handleShowDetailsBook={handleShowDetailsBook}
                 handleLibraryNavigation={handleLibraryNavigation}
+                handleShelfNavigation={handleShelfNavigation}
                 booksTransferProgress={booksTransferProgress}
                 handlePushLibrary={pushLibrary}
                 onSearchContents={() => handleSearchTargetChange('text')}

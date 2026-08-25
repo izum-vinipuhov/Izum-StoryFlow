@@ -839,6 +839,7 @@ export const createGroupSorter =
 export type BookContextMenuItemId =
   | 'select'
   | 'group'
+  | 'addToShelf'
   | 'markFinished'
   | 'markUnread'
   | 'markAbandoned'
@@ -961,11 +962,22 @@ export const pickFresherMetadata = (
  * races on the Tauri IPC boundary, so the items land in a non-deterministic
  * order and the menu appears to shuffle on every open (issue #4389).
  */
+/**
+ * Params to restore after a hard reload: the `lastLibraryParams` snapshot
+ * from sessionStorage when the current URL has no params (direct links win).
+ * SessionStorage survives a hard reload but dies with the tab, so the
+ * restore happens at most once per tab.
+ */
+export const getRestoredLibraryParams = (
+  currentParams: string,
+  lastParams: string | null,
+): string | null => (currentParams ? null : lastParams || null);
+
 export const getBookContextMenuItemIds = (
   book: Book,
   opts?: { localSend?: boolean },
 ): BookContextMenuItemId[] => {
-  const ids: BookContextMenuItemId[] = ['select', 'group'];
+  const ids: BookContextMenuItemId[] = ['select', 'group', 'addToShelf'];
   ids.push(book.readingStatus === 'finished' ? 'markUnread' : 'markFinished');
   if (book.readingStatus !== 'abandoned') ids.push('markAbandoned');
   // "Clear Status" is offered only when the book has an explicit status set.

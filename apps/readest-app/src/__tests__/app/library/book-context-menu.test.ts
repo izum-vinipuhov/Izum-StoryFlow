@@ -20,6 +20,7 @@ describe('getBookContextMenuItemIds', () => {
     expect(getBookContextMenuItemIds(book)).toEqual([
       'select',
       'group',
+      'addToShelf',
       'markFinished',
       'markAbandoned',
       'showDetails',
@@ -45,6 +46,7 @@ describe('getBookContextMenuItemIds', () => {
     expect(getBookContextMenuItemIds(book)).toEqual([
       'select',
       'group',
+      'addToShelf',
       'markUnread',
       'markAbandoned',
       'clearStatus',
@@ -62,6 +64,7 @@ describe('getBookContextMenuItemIds', () => {
     expect(getBookContextMenuItemIds(book)).toEqual([
       'select',
       'group',
+      'addToShelf',
       'markFinished',
       'markAbandoned',
       'clearStatus',
@@ -79,6 +82,7 @@ describe('getBookContextMenuItemIds', () => {
     expect(getBookContextMenuItemIds(book)).toEqual([
       'select',
       'group',
+      'addToShelf',
       'markFinished',
       'clearStatus',
       'showDetails',
@@ -95,6 +99,7 @@ describe('getBookContextMenuItemIds', () => {
     expect(getBookContextMenuItemIds(book)).toEqual([
       'select',
       'group',
+      'addToShelf',
       'markFinished',
       'markAbandoned',
       'showDetails',
@@ -111,6 +116,7 @@ describe('getBookContextMenuItemIds', () => {
     expect(getBookContextMenuItemIds(book)).toEqual([
       'select',
       'group',
+      'addToShelf',
       'markFinished',
       'markAbandoned',
       'showDetails',
@@ -131,6 +137,7 @@ describe('getBookContextMenuItemIds', () => {
     expect(getBookContextMenuItemIds(book)).toEqual([
       'select',
       'group',
+      'addToShelf',
       'markFinished',
       'markAbandoned',
       'showDetails',

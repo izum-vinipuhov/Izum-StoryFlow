@@ -123,6 +123,10 @@ const ViewMenu: React.FC<ViewMenuProps> = ({ setIsDropdownOpen }) => {
     );
   };
 
+  const handleToggleShelves = async () => {
+    await saveSysSettings(envConfig, 'libraryShelvesEnabled', !settings.libraryShelvesEnabled);
+  };
+
   const handleSetColumns = async (value: number) => {
     await saveSysSettings(envConfig, 'libraryColumns', value);
     await saveSysSettings(envConfig, 'libraryAutoColumns', false);
@@ -244,6 +248,16 @@ const ViewMenu: React.FC<ViewMenuProps> = ({ setIsDropdownOpen }) => {
           transient
         />
       ))}
+
+      {/* Shelves */}
+      <hr aria-hidden='true' className='border-base-200 my-1' />
+      <MenuItem
+        label={_('Show shelves')}
+        buttonClass='min-h-8 !py-1'
+        toggled={settings.libraryShelvesEnabled}
+        onClick={handleToggleShelves}
+        transient
+      />
 
       {/* Recently read shelf */}
       <hr aria-hidden='true' className='border-base-200 my-1' />

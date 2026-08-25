@@ -219,6 +219,13 @@ const BookshelfItem: React.FC<BookshelfItemProps> = ({
           handleGroupBooks();
         },
       },
+      addToShelf: {
+        text: _('Add to Shelf…'),
+        action: async () => {
+          // Bookshelf.tsx hosts the dialog; we dispatch and let it route.
+          eventDispatcher.dispatch('show-add-to-shelf-dialog', { book });
+        },
+      },
       markFinished: {
         text: _('Mark as Finished'),
         action: async () => {
