@@ -22,7 +22,14 @@ const jobsUrl = (id?: string) =>
     ? `${getAPIBaseUrl()}/yandex/jobs/${encodeURIComponent(id)}`
     : `${getAPIBaseUrl()}/yandex/jobs`;
 
-const pollServerJobs = async (completedIdsRef: { current: Set<string> } | null = null) => {
+// Module-level fallback so one-shot polls (pollServerJobsOnce, used by the
+// import dialog's sequential batches) also dispatch the book-imported event —
+// useBooksSync listens for it and pulls the finished book into the library.
+const oneShotCompletedIds = { current: new Set<string>() };
+
+const pollServerJobs = async (
+  completedIdsRef: { current: Set<string> } | null = oneShotCompletedIds,
+) => {
   try {
     const response = await fetchWithAuth(jobsUrl(), { method: 'GET' });
     const { jobs } = (await response.json()) as { jobs: YandexDownloadJob[] };
