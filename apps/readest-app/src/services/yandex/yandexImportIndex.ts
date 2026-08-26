@@ -78,7 +78,8 @@ export const computeEbookPartState = async (
     const entry = index.books[bookUuid];
     if (!entry) return 'not-downloaded';
     const book = useLibraryStore.getState().getBookByHash(entry.bookHash);
-    if (book && !book.deletedAt && (await appService.isBookAvailable(book))) return 'downloaded';
+    if (book && !book.deletedAt && (await appService.isBookLocallyAvailable(book)))
+      return 'downloaded';
     return 'not-downloaded';
   } catch {
     return 'not-downloaded';
@@ -95,7 +96,11 @@ export const computeAudiobookPartState = async (
     const hash = getAudiobookManifestHash(chapters);
     // A standalone audiobook's book hash is its manifest hash.
     const standalone = useLibraryStore.getState().getBookByHash(hash);
-    if (standalone && !standalone.deletedAt && (await appService.isBookAvailable(standalone))) {
+    if (
+      standalone &&
+      !standalone.deletedAt &&
+      (await appService.isBookLocallyAvailable(standalone))
+    ) {
       return 'downloaded';
     }
     // A full download attaches the audiobook to the ebook instead.
@@ -105,7 +110,7 @@ export const computeAudiobookPartState = async (
       if (
         ebook &&
         !ebook.deletedAt &&
-        (await appService.isBookAvailable(ebook)) &&
+        (await appService.isBookLocallyAvailable(ebook)) &&
         (await appService.exists(getAttachedAudiobookManifestFilename(ebook.hash), 'Books'))
       ) {
         return 'downloaded';

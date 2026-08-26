@@ -811,6 +811,17 @@ export async function isBookAvailable(fs: FileSystem, book: Book): Promise<boole
   return (await resolveBookContentSource(fs, book)).kind !== 'missing';
 }
 
+/**
+ * Whether the book's bytes live on this device (managed or in-place), as
+ * opposed to being reachable only via a URL/stream (cloud-only rows).
+ * Download flows use this so a cloud book the user deleted locally is
+ * offered for re-download instead of being reported as present.
+ */
+export async function isBookLocallyAvailable(fs: FileSystem, book: Book): Promise<boolean> {
+  const source = await resolveBookContentSource(fs, book);
+  return source.kind === 'managed' || source.kind === 'external';
+}
+
 export async function getBookFileSize(fs: FileSystem, book: Book): Promise<number | null> {
   const source = await resolveBookContentSource(fs, book);
   if (source.kind !== 'managed' && source.kind !== 'external') {

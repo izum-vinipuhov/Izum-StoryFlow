@@ -230,6 +230,7 @@ export interface AppService {
   downloadBookCovers(books: Book[], redownload?: boolean): Promise<void>;
   exportBook(book: Book): Promise<boolean>;
   isBookAvailable(book: Book): Promise<boolean>;
+  isBookLocallyAvailable(book: Book): Promise<boolean>;
   getBookFileSize(book: Book): Promise<number | null>;
   loadBookConfig(book: Book, settings: SystemSettings): Promise<BookConfig>;
   loadAudiobookManifest(book: Book): Promise<AudiobookManifest>;

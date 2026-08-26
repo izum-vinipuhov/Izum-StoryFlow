@@ -48,6 +48,7 @@ const appServiceMocks = vi.hoisted(() => ({
   }),
   exists: vi.fn<() => Promise<boolean>>(async () => false),
   isBookAvailable: vi.fn<() => Promise<boolean>>(async () => false),
+  isBookLocallyAvailable: vi.fn<() => Promise<boolean>>(async () => false),
 }));
 
 vi.mock('@/services/yandex/client', async (importOriginal) => {
@@ -137,7 +138,9 @@ beforeEach(() => {
   appServiceMocks.exists.mockReset();
   appServiceMocks.exists.mockResolvedValue(false);
   appServiceMocks.isBookAvailable.mockReset();
-  appServiceMocks.isBookAvailable.mockResolvedValue(false);
+  appServiceMocks.isBookLocallyAvailable.mockResolvedValue(false);
+  appServiceMocks.isBookLocallyAvailable.mockReset();
+  appServiceMocks.isBookLocallyAvailable.mockResolvedValue(false);
   useYandexDownloadsStore.getState().clearAll();
   useLibraryStore.getState().setLibrary([]);
 });
@@ -453,7 +456,7 @@ describe('YandexImportDialog', () => {
       metadata: { title: 'Книга 1', author: '', language: 'und', yandex: { uuid: 'p1' } },
     };
     useLibraryStore.getState().setLibrary([book as Book]);
-    appServiceMocks.isBookAvailable.mockResolvedValue(true);
+    appServiceMocks.isBookLocallyAvailable.mockResolvedValue(true);
 
     render(<YandexImportDialog isOpen onClose={vi.fn()} />);
     await search('https://books.yandex.ru/series/Sr12345');
@@ -677,7 +680,7 @@ describe('YandexImportDialog', () => {
     appServiceMocks.readFile.mockResolvedValue(
       JSON.stringify({ schemaVersion: 1, books: { Abc123: { bookHash: 'h1' } }, audiobooks: {} }),
     );
-    appServiceMocks.isBookAvailable.mockResolvedValue(true);
+    appServiceMocks.isBookLocallyAvailable.mockResolvedValue(true);
     useLibraryStore.getState().setLibrary([bookRow('h1')]);
     clientMocks.fetchBookInfo.mockResolvedValue(bookInfo);
     clientMocks.fetchAudiobookInfo.mockResolvedValue(audiobookInfo);
@@ -695,7 +698,7 @@ describe('YandexImportDialog', () => {
   it('disables the Audiobook button when only the standalone audiobook is downloaded', async () => {
     const chapters = [{ title: 'Chapter {{number}}', durationSec: 2120 }];
     const hash = getAudiobookManifestHash(chapters);
-    appServiceMocks.isBookAvailable.mockResolvedValue(true);
+    appServiceMocks.isBookLocallyAvailable.mockResolvedValue(true);
     useLibraryStore.getState().setLibrary([bookRow(hash, 'AUDIOBOOK')]);
     clientMocks.fetchBookInfo.mockResolvedValue(bookInfo);
     clientMocks.fetchAudiobookInfo.mockResolvedValue(audiobookInfo);
@@ -716,7 +719,7 @@ describe('YandexImportDialog', () => {
     appServiceMocks.readFile.mockResolvedValue(
       JSON.stringify({ schemaVersion: 1, books: { Abc123: { bookHash: 'h1' } }, audiobooks: {} }),
     );
-    appServiceMocks.isBookAvailable.mockResolvedValue(true);
+    appServiceMocks.isBookLocallyAvailable.mockResolvedValue(true);
     useLibraryStore.getState().setLibrary([bookRow('h1'), bookRow(hash, 'AUDIOBOOK')]);
     clientMocks.fetchBookInfo.mockResolvedValue(bookInfo);
     clientMocks.fetchAudiobookInfo.mockResolvedValue(audiobookInfo);
@@ -740,7 +743,7 @@ describe('YandexImportDialog', () => {
       metadata: { title: 'Книга', author: '', language: 'und', yandex: { uuid: 'Abc123' } },
     };
     useLibraryStore.getState().setLibrary([book as Book]);
-    appServiceMocks.isBookAvailable.mockResolvedValue(true);
+    appServiceMocks.isBookLocallyAvailable.mockResolvedValue(true);
     clientMocks.fetchBookInfo.mockResolvedValue(bookInfo);
     clientMocks.fetchAudiobookInfo.mockRejectedValue(new Error('Audiobook not found'));
 
@@ -761,7 +764,7 @@ describe('YandexImportDialog', () => {
       metadata: { title: 'Книга', author: '', language: 'und', yandex: { uuid: 'Abc123' } },
     };
     useLibraryStore.getState().setLibrary([book as Book]);
-    appServiceMocks.isBookAvailable.mockResolvedValue(false);
+    appServiceMocks.isBookLocallyAvailable.mockResolvedValue(false);
     clientMocks.fetchBookInfo.mockResolvedValue(bookInfo);
     clientMocks.fetchAudiobookInfo.mockRejectedValue(new Error('Audiobook not found'));
 

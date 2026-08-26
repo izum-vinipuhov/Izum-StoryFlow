@@ -203,7 +203,7 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
         const availableStamped = appService
           ? (
               await Promise.all(
-                stamped.map(async (b) => ((await appService.isBookAvailable(b)) ? b : null)),
+                stamped.map(async (b) => ((await appService.isBookLocallyAvailable(b)) ? b : null)),
               )
             ).filter((b): b is NonNullable<typeof b> => b !== null)
           : [];
@@ -386,7 +386,7 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
         // forever.
         const availableYandexBooks = (
           await Promise.all(
-            yandexBooks.map(async (b) => ((await appService.isBookAvailable(b)) ? b : null)),
+            yandexBooks.map(async (b) => ((await appService.isBookLocallyAvailable(b)) ? b : null)),
           )
         ).filter((b): b is NonNullable<typeof b> => b !== null);
         const states: Partial<Record<YandexPartKey, YandexPartAvailability>> = {};

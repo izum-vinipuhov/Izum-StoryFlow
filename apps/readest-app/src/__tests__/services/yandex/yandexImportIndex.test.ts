@@ -31,6 +31,7 @@ const createAppService = (overrides: Partial<AppService> = {}) =>
     writeFile: vi.fn(async () => {}),
     exists: vi.fn(async () => false),
     isBookAvailable: vi.fn(async () => false),
+    isBookLocallyAvailable: vi.fn(async () => false),
     ...overrides,
   }) as unknown as AppService;
 
@@ -106,7 +107,7 @@ describe('yandexImportIndex', () => {
 
   describe('computeEbookPartState', () => {
     it('reports downloaded when the indexed book is available locally', async () => {
-      const appService = createAppService({ isBookAvailable: vi.fn(async () => true) });
+      const appService = createAppService({ isBookLocallyAvailable: vi.fn(async () => true) });
       useLibraryStore.getState().setLibrary([book('h1')]);
       const index: YandexImportIndex = {
         schemaVersion: 1,
@@ -117,7 +118,7 @@ describe('yandexImportIndex', () => {
     });
 
     it('reports not-downloaded for a deletion tombstone', async () => {
-      const appService = createAppService({ isBookAvailable: vi.fn(async () => true) });
+      const appService = createAppService({ isBookLocallyAvailable: vi.fn(async () => true) });
       useLibraryStore.getState().setLibrary([book('h1', { deletedAt: 1 })]);
       const index: YandexImportIndex = {
         schemaVersion: 1,
@@ -139,7 +140,7 @@ describe('yandexImportIndex', () => {
     });
 
     it('reports not-downloaded without an index entry', async () => {
-      const appService = createAppService({ isBookAvailable: vi.fn(async () => true) });
+      const appService = createAppService({ isBookLocallyAvailable: vi.fn(async () => true) });
       await expect(
         computeEbookPartState(appService, { schemaVersion: 1, books: {}, audiobooks: {} }, 'U1'),
       ).resolves.toBe('not-downloaded');
@@ -161,7 +162,7 @@ describe('yandexImportIndex', () => {
     const emptyIndex: YandexImportIndex = { schemaVersion: 1, books: {}, audiobooks: {} };
 
     it('detects a standalone audiobook by its deterministic hash', async () => {
-      const appService = createAppService({ isBookAvailable: vi.fn(async () => true) });
+      const appService = createAppService({ isBookLocallyAvailable: vi.fn(async () => true) });
       useLibraryStore.getState().setLibrary([book(hash, { format: 'AUDIOBOOK' })]);
       await expect(computeAudiobookPartState(appService, emptyIndex, chapters)).resolves.toBe(
         'downloaded',
@@ -178,7 +179,7 @@ describe('yandexImportIndex', () => {
 
     it('detects an attached audiobook through the index entry', async () => {
       const appService = createAppService({
-        isBookAvailable: vi.fn(async () => true),
+        isBookLocallyAvailable: vi.fn(async () => true),
         exists: vi.fn(async () => true),
       });
       useLibraryStore.getState().setLibrary([book('e1')]);
@@ -212,6 +213,7 @@ describe('yandexImportIndex', () => {
     it('reports not-downloaded when the attached ebook is unavailable', async () => {
       const appService = createAppService({
         isBookAvailable: vi.fn(async () => false),
+        isBookLocallyAvailable: vi.fn(async () => false),
         exists: vi.fn(async () => true),
       });
       useLibraryStore.getState().setLibrary([book('e1')]);
@@ -226,7 +228,7 @@ describe('yandexImportIndex', () => {
     });
 
     it('reports not-downloaded when nothing matches', async () => {
-      const appService = createAppService({ isBookAvailable: vi.fn(async () => true) });
+      const appService = createAppService({ isBookLocallyAvailable: vi.fn(async () => true) });
       await expect(computeAudiobookPartState(appService, emptyIndex, chapters)).resolves.toBe(
         'not-downloaded',
       );
