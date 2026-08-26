@@ -40,3 +40,33 @@ export interface YandexTrack {
 export interface YandexTracksResponse {
   tracks?: YandexTrack[];
 }
+
+export interface YandexComicbookInfo {
+  title: string;
+  cover?: YandexCover;
+  authors?: YandexPerson[];
+}
+
+export interface YandexComicbookMetadata {
+  /** Whole-comic zip archive — saved as a .cbz and imported directly. */
+  uris?: { zip?: string };
+}
+
+export interface YandexSerialEpisode {
+  uuid: string;
+  title?: string;
+}
+
+export interface YandexSeriesInfo {
+  title: string;
+  cover?: YandexCover;
+  authors?: YandexPerson[];
+}
+
+export interface YandexSeriesPart {
+  uuid: string;
+  title?: string;
+  /** 'book' | 'audiobook' | 'comicbook'; detected from the resource keys when absent. */
+  type?: string;
+  cover?: YandexCover;
+}

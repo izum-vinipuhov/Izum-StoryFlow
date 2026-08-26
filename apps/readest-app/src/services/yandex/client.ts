@@ -4,6 +4,11 @@ import type { SystemSettings } from '@/types/settings';
 import type {
   YandexAudiobookInfo,
   YandexBookInfo,
+  YandexComicbookInfo,
+  YandexComicbookMetadata,
+  YandexSerialEpisode,
+  YandexSeriesInfo,
+  YandexSeriesPart,
   YandexTrack,
   YandexTracksResponse,
 } from './types';
@@ -55,8 +60,7 @@ export const parseYandexUrl = (url: string): { type: YandexResourceType; uuid: s
   }
 };
 
-export const isSupportedYandexType = (type: YandexResourceType): boolean =>
-  type === 'book' || type === 'audiobook';
+export const isSupportedYandexType = (_type: YandexResourceType): boolean => true;
 
 export const getYandexHeaders = (token: string): Record<string, string> => ({
   // Keep in sync with serverFetch.fetchYandexResource: the API 500s on the
@@ -386,3 +390,52 @@ export const searchYandexBooks = async (
 /** Normalizes a title for exact-match comparison: case, ё/е, whitespace. */
 export const normalizeYandexTitle = (title: string): string =>
   title.toLowerCase().replace(/ё/g, 'е').replace(/\s+/g, ' ').trim();
+
+export const fetchComicbookInfo = async (
+  uuid: string,
+  token: string,
+): Promise<YandexComicbookInfo> => {
+  const data = (await fetchYandexJson(`/comicbooks/${uuid}`, token)) as {
+    comicbook?: YandexComicbookInfo;
+  };
+  if (!data?.comicbook) throw new Error('Comicbook not found');
+  return data.comicbook;
+};
+
+export const fetchComicbookMetadata = async (
+  uuid: string,
+  token: string,
+): Promise<YandexComicbookMetadata> => {
+  return (await fetchYandexJson(
+    `/comicbooks/${uuid}/metadata.json`,
+    token,
+  )) as YandexComicbookMetadata;
+};
+
+export const fetchSerialEpisodes = async (
+  uuid: string,
+  token: string,
+): Promise<YandexSerialEpisode[]> => {
+  const data = (await fetchYandexJson(`/books/${uuid}/episodes`, token)) as {
+    episodes?: YandexSerialEpisode[];
+  };
+  return data?.episodes ?? [];
+};
+
+export const fetchSeriesInfo = async (uuid: string, token: string): Promise<YandexSeriesInfo> => {
+  const data = (await fetchYandexJson(`/series/${uuid}`, token)) as {
+    series?: YandexSeriesInfo;
+  };
+  if (!data?.series) throw new Error('Series not found');
+  return data.series;
+};
+
+export const fetchSeriesParts = async (
+  uuid: string,
+  token: string,
+): Promise<YandexSeriesPart[]> => {
+  const data = (await fetchYandexJson(`/series/${uuid}/parts`, token)) as {
+    parts?: YandexSeriesPart[];
+  };
+  return data?.parts ?? [];
+};

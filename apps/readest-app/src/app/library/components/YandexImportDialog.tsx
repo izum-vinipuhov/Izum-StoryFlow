@@ -32,6 +32,11 @@ import {
   YANDEX_API_BASE,
   fetchAudiobookInfo,
   fetchBookInfo,
+  fetchComicbookInfo,
+  fetchComicbookMetadata,
+  fetchSerialEpisodes,
+  fetchSeriesInfo,
+  fetchSeriesParts,
   fetchTracks,
   getChapterUrl,
   getTrackDurationSec,
@@ -57,7 +62,15 @@ import {
   getAudiobookChapterPath,
   getAudiobookManifestHash,
 } from '@/utils/audiobook';
-import type { YandexAudiobookInfo, YandexBookInfo, YandexTrack } from '@/services/yandex/types';
+import type {
+  YandexAudiobookInfo,
+  YandexBookInfo,
+  YandexComicbookInfo,
+  YandexSerialEpisode,
+  YandexSeriesInfo,
+  YandexSeriesPart,
+  YandexTrack,
+} from '@/services/yandex/types';
 
 interface YandexImportDialogProps {
   isOpen: boolean;
@@ -73,9 +86,14 @@ interface SearchInfo {
     tracks: YandexTrack[];
     firstChapterBytes: number | null;
   };
+  comicbook?: { info: YandexComicbookInfo; zipUrl: string };
+  /** A multi-part text book: each episode downloads as its own book. */
+  serial?: { title: string; author: string; coverUrl: string; episodes: YandexSerialEpisode[] };
+  /** A series of independent resources (books / audiobooks / comics). */
+  series?: { info: YandexSeriesInfo; parts: YandexSeriesPart[] };
 }
 
-type YandexPartKey = 'book' | 'audiobook';
+type YandexPartKey = 'book' | 'audiobook' | 'comicbook' | 'serial' | 'series';
 type YandexPartState = YandexPartAvailability | 'downloading' | 'paused' | 'failed';
 
 const formatDuration = (sec: number, _: (key: string) => string): string => {
@@ -144,7 +162,7 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
       return;
     }
     if (!isSupportedYandexType(parsed.type)) {
-      setError(_('Comics, serials and series are not supported yet'));
+      setError(_('Unsupported link type'));
       return;
     }
     const token = getYandexAccessToken(settings);
@@ -157,6 +175,37 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
     setInfo(null);
     setPartStates({});
     try {
+      if (parsed.type === 'comicbook' || parsed.type === 'serial' || parsed.type === 'series') {
+        const nextInfo: SearchInfo = { uuid: parsed.uuid };
+        if (parsed.type === 'comicbook') {
+          const comicInfo = await fetchComicbookInfo(parsed.uuid, token);
+          const metadata = await fetchComicbookMetadata(parsed.uuid, token);
+          const zipUrl = metadata.uris?.zip;
+          if (!zipUrl) throw new Error('Comicbook archive not found');
+          nextInfo.comicbook = { info: comicInfo, zipUrl };
+        } else if (parsed.type === 'serial') {
+          const [infoResult, episodes] = await Promise.all([
+            fetchBookInfo(parsed.uuid, token).catch(() => null),
+            fetchSerialEpisodes(parsed.uuid, token),
+          ]);
+          if (!episodes.length) throw new Error('Serial episodes not found');
+          nextInfo.serial = {
+            title: infoResult?.title ?? parsed.uuid,
+            author: infoResult ? getAuthors(infoResult) : '',
+            coverUrl: infoResult?.cover?.large ?? '',
+            episodes,
+          };
+        } else {
+          const [seriesInfo, parts] = await Promise.all([
+            fetchSeriesInfo(parsed.uuid, token),
+            fetchSeriesParts(parsed.uuid, token),
+          ]);
+          if (!parts.length) throw new Error('Series parts not found');
+          nextInfo.series = { info: seriesInfo, parts };
+        }
+        setInfo(nextInfo);
+        return;
+      }
       const [bookResult, audiobookResult] = await Promise.allSettled([
         fetchBookInfo(parsed.uuid, token),
         fetchAudiobookInfo(parsed.uuid, token),
@@ -420,6 +469,232 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
     });
   };
 
+  const buildComicbookSpec = (): YandexJobSpec => {
+    const { info: comic, zipUrl } = info!.comicbook!;
+    return {
+      id: `${info!.uuid}::comicbook`,
+      resourceType: 'comicbook',
+      title: comic.title,
+      author: getAuthors(comic),
+      coverUrl: comic.cover?.large ?? '',
+      files: [{ name: `${info!.uuid}.cbz`, url: zipUrl, path: `${info!.uuid}.cbz`, base: 'Cache' }],
+    };
+  };
+
+  const startComicbookDownload = async () => {
+    if (!info?.comicbook) return;
+    await startDownload(buildComicbookSpec(), { target: downloadTarget });
+  };
+
+  /** A serial downloads as one book job per episode (each is its own uuid). */
+  const startSerialDownload = async () => {
+    if (!info?.serial) return;
+    const serial = info.serial;
+    for (const [index, episode] of serial.episodes.entries()) {
+      void startDownload(
+        {
+          id: episode.uuid,
+          resourceType: 'book',
+          title: episode.title ?? `${serial.title} — ${index + 1}`,
+          author: serial.author,
+          coverUrl: serial.coverUrl,
+          files: [
+            {
+              name: `${episode.uuid}.epub`,
+              url: `${YANDEX_API_BASE}/books/${episode.uuid}/content/v4`,
+              path: `${episode.uuid}.epub`,
+              base: 'Cache',
+            },
+          ],
+        },
+        { target: downloadTarget },
+      );
+    }
+  };
+
+  const seriesPartType = (part: YandexSeriesPart): 'book' | 'audiobook' | 'comicbook' => {
+    if (part.type === 'audiobook' || part.type === 'comicbook') return part.type;
+    return 'book';
+  };
+
+  /** Lazily resolve one series part (the REST parts list carries no URLs). */
+  const startSeriesPartDownload = async (part: YandexSeriesPart) => {
+    if (!info?.series) return;
+    const token = getYandexAccessToken(settings);
+    const type = seriesPartType(part);
+    const title = part.title ?? info.series.info.title;
+    const cover = part.cover?.large ?? info.series.info.cover?.large ?? '';
+    try {
+      if (type === 'book') {
+        await startDownload(
+          {
+            id: part.uuid,
+            resourceType: 'book',
+            title,
+            author: '',
+            coverUrl: cover,
+            files: [
+              {
+                name: `${part.uuid}.epub`,
+                url: `${YANDEX_API_BASE}/books/${part.uuid}/content/v4`,
+                path: `${part.uuid}.epub`,
+                base: 'Cache',
+              },
+            ],
+          },
+          { target: downloadTarget },
+        );
+        return;
+      }
+      if (type === 'comicbook') {
+        const metadata = await fetchComicbookMetadata(part.uuid, token);
+        const zipUrl = metadata.uris?.zip;
+        if (!zipUrl) return;
+        await startDownload(
+          {
+            id: part.uuid,
+            resourceType: 'comicbook',
+            title,
+            author: '',
+            coverUrl: cover,
+            files: [
+              { name: `${part.uuid}.cbz`, url: zipUrl, path: `${part.uuid}.cbz`, base: 'Cache' },
+            ],
+          },
+          { target: downloadTarget },
+        );
+        return;
+      }
+      const abInfo = await fetchAudiobookInfo(part.uuid, token);
+      const tracks = (await fetchTracks(part.uuid, token)).filter((track) => getChapterUrl(track));
+      const chapters = buildChapters(tracks);
+      const hash = getAudiobookManifestHash(
+        chapters.map(({ title: t, durationSec }) => ({ title: t, durationSec })),
+      );
+      await startDownload(
+        {
+          id: `${part.uuid}::audiobook`,
+          resourceType: 'audiobook',
+          title: abInfo.title,
+          author: getAuthors(abInfo),
+          coverUrl: abInfo.cover?.large ?? cover,
+          files: tracks.map((track, index) => ({
+            name: `chapter_${String(index + 1).padStart(3, '0')}.m4a`,
+            url: getChapterUrl(track)!,
+            path: getAudiobookChapterPath(hash, index),
+            base: 'Books',
+          })),
+          audiobook: { hash, chapters },
+        },
+        { target: downloadTarget },
+      );
+    } catch (e) {
+      setError(e instanceof Error ? _(e.message) : _('Could not fetch this book'));
+    }
+  };
+
+  // A per-id job row lookup for the extra part types (comic / serial / series
+  // parts), which are not covered by the book/audiobook availability snapshot.
+  const extraJob = (id: string): YandexDownloadJob | undefined =>
+    [...jobs, ...serverJobs].find((job) => job.id === id);
+
+  const extraPartCell = (
+    id: string,
+    label: string,
+    icon: React.ReactNode,
+    onDownload: () => void,
+  ) => {
+    const job = extraJob(id);
+    if (job?.status === 'completed') {
+      return (
+        <button type='button' className='btn btn-contrast btn-sm' disabled>
+          <MdCheck className='h-4 w-4' />
+          {icon}
+          {label}
+        </button>
+      );
+    }
+    if (job && (job.status === 'downloading' || job.status === 'paused')) {
+      return (
+        <div className='col-span-2 flex items-center gap-2 rounded-lg border border-base-200 p-2 eink-bordered'>
+          <div className='bg-base-300 h-1.5 flex-1 overflow-hidden rounded-full'>
+            <div
+              className='bg-primary h-full transition-all'
+              style={{
+                width: `${
+                  job.totalBytes ? Math.min(100, (job.downloadedBytes / job.totalBytes) * 100) : 0
+                }%`,
+              }}
+            />
+          </div>
+          <span className='text-base-content/60 shrink-0 text-xs'>
+            {job.totalBytes
+              ? `${formatBytes(job.downloadedBytes)} / ${formatBytes(job.totalBytes)}`
+              : formatBytes(job.downloadedBytes)}
+          </span>
+          {job.status === 'downloading' && (
+            <button
+              type='button'
+              className='btn btn-ghost btn-sm btn-circle'
+              aria-label={_('Pause')}
+              onClick={() => jobPause(job)}
+            >
+              <MdPause className='h-4 w-4' />
+            </button>
+          )}
+          {job.status === 'paused' && (
+            <button
+              type='button'
+              className='btn btn-ghost btn-sm btn-circle'
+              aria-label={_('Resume')}
+              onClick={() => jobResume(job)}
+            >
+              <MdPlayArrow className='h-4 w-4' />
+            </button>
+          )}
+          <button
+            type='button'
+            className='btn btn-ghost btn-sm btn-circle'
+            aria-label={_('Cancel')}
+            onClick={() => jobCancel(job)}
+          >
+            <MdClose className='h-4 w-4' />
+          </button>
+        </div>
+      );
+    }
+    if (job?.status === 'failed') {
+      return (
+        <div className='col-span-2 flex items-center gap-2 rounded-lg border border-base-200 p-2 eink-bordered'>
+          <span className='text-error flex-1 truncate text-sm'>{job.error ?? _('Failed')}</span>
+          <button
+            type='button'
+            className='btn btn-ghost btn-sm btn-circle'
+            aria-label={_('Retry')}
+            onClick={() => jobResume(job)}
+          >
+            <MdRefresh className='h-4 w-4' />
+          </button>
+          <button
+            type='button'
+            className='btn btn-ghost btn-sm btn-circle'
+            aria-label={_('Cancel')}
+            onClick={() => jobDismiss(job)}
+          >
+            <MdClose className='h-4 w-4' />
+          </button>
+        </div>
+      );
+    }
+    return (
+      <button type='button' className='btn btn-contrast btn-sm' onClick={onDownload}>
+        <MdDownload className='h-4 w-4' />
+        {icon}
+        {label}
+      </button>
+    );
+  };
+
   // A part's live state: an active/kept job row (local session or server)
   // overrides the availability snapshot taken at search time.
   const findPartJob = (part: YandexPartKey): YandexDownloadJob | undefined => {
@@ -466,7 +741,9 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
     bookState === 'paused' ||
     audioState === 'downloading' ||
     audioState === 'paused';
-  const anyPartNotDownloaded = bookState === 'not-downloaded' || audioState === 'not-downloaded';
+  const hasExtraParts = !!(info?.comicbook || info?.serial || info?.series);
+  const anyPartNotDownloaded =
+    bookState === 'not-downloaded' || audioState === 'not-downloaded' || hasExtraParts;
   const showDownloadFully =
     !!info?.book &&
     !!info?.audiobook &&
@@ -476,7 +753,8 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
   // to download — hide the part buttons entirely.
   const offeredPartsDownloaded =
     (!info?.book || bookState === 'downloaded') &&
-    (!info?.audiobook || audioState === 'downloaded');
+    (!info?.audiobook || audioState === 'downloaded') &&
+    !hasExtraParts;
 
   const partCell = (
     part: YandexPartKey,
@@ -585,9 +863,23 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
     );
   };
 
-  const coverUrl = info?.book?.info.cover?.large ?? info?.audiobook?.info.cover?.large ?? '';
-  const title = info?.book?.info.title ?? info?.audiobook?.info.title ?? '';
-  const author = info ? getAuthors(info.book?.info ?? info.audiobook?.info ?? {}) : '';
+  const coverUrl =
+    info?.book?.info.cover?.large ??
+    info?.audiobook?.info.cover?.large ??
+    info?.comicbook?.info.cover?.large ??
+    info?.serial?.coverUrl ??
+    info?.series?.info.cover?.large ??
+    '';
+  const title =
+    info?.book?.info.title ??
+    info?.audiobook?.info.title ??
+    info?.comicbook?.info.title ??
+    info?.serial?.title ??
+    info?.series?.info.title ??
+    '';
+  const author = info
+    ? getAuthors(info.book?.info ?? info.audiobook?.info ?? info.comicbook?.info ?? {})
+    : '';
 
   return (
     <Dialog
@@ -644,6 +936,17 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
                   {_('Ebook: {{size}}', {
                     size: info.book.bytes ? formatBytes(info.book.bytes) : _('size unknown'),
                   })}
+                </p>
+              )}
+              {info.comicbook && <p className='text-base-content/70 text-sm'>{_('Comicbook')}</p>}
+              {info.serial && (
+                <p className='text-base-content/70 text-sm'>
+                  {_('Serial: {{count}} parts', { count: info.serial.episodes.length })}
+                </p>
+              )}
+              {info.series && (
+                <p className='text-base-content/70 text-sm'>
+                  {_('Series: {{count}} parts', { count: info.series.parts.length })}
                 </p>
               )}
               {info.audiobook && (
@@ -729,6 +1032,45 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
                       <RiHeadphoneFill className='h-4 w-4' />,
                       () => void startAudiobookDownload(),
                     )}
+                  {info.comicbook &&
+                    extraPartCell(
+                      `${info.uuid}::comicbook`,
+                      _('Comicbook'),
+                      <RiBook2Fill className='h-4 w-4' />,
+                      () => void startComicbookDownload(),
+                    )}
+                  {info.serial &&
+                    extraPartCell(
+                      `${info.uuid}::serial`,
+                      `${_('Book')} · ${info.serial.episodes.length}`,
+                      <RiBook2Fill className='h-4 w-4' />,
+                      () => void startSerialDownload(),
+                    )}
+                  {info.series?.parts.map((part) => {
+                    const type = seriesPartType(part);
+                    const icon =
+                      type === 'audiobook' ? (
+                        <RiHeadphoneFill className='h-4 w-4' />
+                      ) : (
+                        <RiBook2Fill className='h-4 w-4' />
+                      );
+                    const label =
+                      type === 'audiobook'
+                        ? _('Audiobook')
+                        : type === 'comicbook'
+                          ? _('Comicbook')
+                          : _('Book');
+                    return (
+                      <div key={part.uuid} className='contents'>
+                        {extraPartCell(
+                          part.uuid,
+                          `${label} — ${part.title ?? ''}`,
+                          icon,
+                          () => void startSeriesPartDownload(part),
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
               {showDownloadFully && (

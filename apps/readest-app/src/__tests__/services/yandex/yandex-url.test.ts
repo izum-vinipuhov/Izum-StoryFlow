@@ -54,11 +54,11 @@ describe('parseYandexUrl', () => {
 });
 
 describe('isSupportedYandexType', () => {
-  it('supports only book and audiobook', () => {
+  it('supports all resource types', () => {
     expect(isSupportedYandexType('book')).toBe(true);
     expect(isSupportedYandexType('audiobook')).toBe(true);
-    expect(isSupportedYandexType('comicbook')).toBe(false);
-    expect(isSupportedYandexType('serial')).toBe(false);
-    expect(isSupportedYandexType('series')).toBe(false);
+    expect(isSupportedYandexType('comicbook')).toBe(true);
+    expect(isSupportedYandexType('serial')).toBe(true);
+    expect(isSupportedYandexType('series')).toBe(true);
   });
 });

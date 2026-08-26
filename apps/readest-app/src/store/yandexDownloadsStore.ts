@@ -22,7 +22,7 @@ export interface YandexDownloadFile {
 export interface YandexDownloadJob {
   /** Yandex resource uuid, also the job id. */
   id: string;
-  resourceType: 'book' | 'audiobook';
+  resourceType: 'book' | 'audiobook' | 'comicbook';
   title: string;
   author: string;
   coverUrl: string;

@@ -10,8 +10,7 @@ import { CLOUD_BOOKS_SUBDIR } from '@/services/constants';
  * same way (see utils/book.ts).
  */
 
-export const cloudEbookKey = (hash: string, title: string): string => {
-  const ext = 'epub';
+export const cloudEbookKey = (hash: string, title: string, ext = 'epub'): string => {
   const name = getStorageType() === 'r2' ? makeSafeFilename(title) : hash;
   return `${CLOUD_BOOKS_SUBDIR}/${hash}/${name}.${ext}`;
 };

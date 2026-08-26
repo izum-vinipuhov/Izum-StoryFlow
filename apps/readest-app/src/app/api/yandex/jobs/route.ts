@@ -67,7 +67,7 @@ export const jobToClient = (job: ServerYandexJob) => ({
 
 interface ValidatedSpec {
   id: string;
-  resourceType: 'book' | 'audiobook';
+  resourceType: 'book' | 'audiobook' | 'comicbook';
   title: string;
   author: string;
   coverUrl: string;
@@ -98,7 +98,7 @@ const validateBody = (body: YandexJobRequestBody): BodyError | { spec: Validated
     return { error: 'Invalid job id' };
   }
   const resourceType = body.resourceType;
-  if (resourceType !== 'book' && resourceType !== 'audiobook') {
+  if (resourceType !== 'book' && resourceType !== 'audiobook' && resourceType !== 'comicbook') {
     return { error: 'Invalid resourceType' };
   }
   const token = body.token;

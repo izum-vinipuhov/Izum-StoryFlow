@@ -9,7 +9,7 @@ import type { Book } from '@/types/book';
 export interface YandexJobSpec {
   /** Yandex resource uuid, also the job id. */
   id: string;
-  resourceType: 'book' | 'audiobook';
+  resourceType: 'book' | 'audiobook' | 'comicbook';
   title: string;
   author: string;
   coverUrl: string;
@@ -225,7 +225,7 @@ class YandexDownloadsManager {
       // Merge into the library BEFORE chaining follow-ups: a chained job
       // snapshots the library and must see the book it attaches to.
       await deps.onBooksImported(imported);
-      if (spec.resourceType === 'book' && imported[0]) {
+      if ((spec.resourceType === 'book' || spec.resourceType === 'comicbook') && imported[0]) {
         await deps.onBookImported?.(imported[0]);
       }
       store().updateJob(id, { status: 'completed' });
@@ -263,7 +263,7 @@ class YandexDownloadsManager {
     // `bytes.slice()` gives an ArrayBuffer-backed copy (`bytes.buffer` is
     // typed ArrayBufferLike, which FileSystem.writeFile does not accept).
     const buffer = bytes.slice().buffer;
-    if (spec.resourceType === 'book') {
+    if (spec.resourceType === 'book' || spec.resourceType === 'comicbook') {
       const dst = await appService.resolveFilePath(specFile.path, specFile.base);
       await appService.writeFile(dst, 'None', buffer);
     } else {
@@ -274,7 +274,7 @@ class YandexDownloadsManager {
   private async cleanupWrittenFiles(job: YandexDownloadJob, appService: AppService) {
     for (const file of job.files) {
       if (file.status !== 'completed') continue;
-      if (job.resourceType === 'book') {
+      if (job.resourceType === 'book' || job.resourceType === 'comicbook') {
         const dst = await appService.resolveFilePath(file.path, file.base);
         await appService.deleteFile(dst, 'None');
       } else {

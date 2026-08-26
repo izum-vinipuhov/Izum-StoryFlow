@@ -35,6 +35,11 @@ const clientMocks = vi.hoisted(() => ({
   fetchTracks: vi.fn(),
   probeFileSize: vi.fn(),
   searchYandexBooks: vi.fn(),
+  fetchComicbookInfo: vi.fn(),
+  fetchComicbookMetadata: vi.fn(),
+  fetchSerialEpisodes: vi.fn(),
+  fetchSeriesInfo: vi.fn(),
+  fetchSeriesParts: vi.fn(),
 }));
 
 const appServiceMocks = vi.hoisted(() => ({
@@ -54,6 +59,11 @@ vi.mock('@/services/yandex/client', async (importOriginal) => {
     fetchTracks: clientMocks.fetchTracks,
     probeFileSize: clientMocks.probeFileSize,
     searchYandexBooks: clientMocks.searchYandexBooks,
+    fetchComicbookInfo: clientMocks.fetchComicbookInfo,
+    fetchComicbookMetadata: clientMocks.fetchComicbookMetadata,
+    fetchSerialEpisodes: clientMocks.fetchSerialEpisodes,
+    fetchSeriesInfo: clientMocks.fetchSeriesInfo,
+    fetchSeriesParts: clientMocks.fetchSeriesParts,
   };
 });
 
@@ -108,6 +118,11 @@ beforeEach(() => {
   clientMocks.probeFileSize.mockReset();
   clientMocks.searchYandexBooks.mockReset();
   clientMocks.searchYandexBooks.mockResolvedValue([]);
+  clientMocks.fetchComicbookInfo.mockReset();
+  clientMocks.fetchComicbookMetadata.mockReset();
+  clientMocks.fetchSerialEpisodes.mockReset();
+  clientMocks.fetchSeriesInfo.mockReset();
+  clientMocks.fetchSeriesParts.mockReset();
   clientMocks.probeFileSize.mockResolvedValue(null);
   appServiceMocks.readFile.mockReset();
   appServiceMocks.readFile.mockImplementation(async () => {
@@ -280,6 +295,71 @@ describe('YandexImportDialog', () => {
 
     expect(await screen.findByRole('button', { name: 'Audiobook' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Book' })).toBeNull();
+  });
+
+  it('offers the comicbook button for a comic link', async () => {
+    clientMocks.fetchComicbookInfo.mockResolvedValue({
+      title: 'Смешарики',
+      cover: { large: 'https://covers/comic.jpeg' },
+      authors: [{ name: 'Автор' }],
+    });
+    clientMocks.fetchComicbookMetadata.mockResolvedValue({
+      uris: { zip: 'https://cdn/comic.zip' },
+    });
+
+    render(<YandexImportDialog isOpen onClose={vi.fn()} />);
+    await search('https://books.yandex.ru/comicbooks/stg0zJOr');
+
+    expect(await screen.findByRole('button', { name: 'Comicbook' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Comicbook' }));
+    await waitFor(() => expect(startDownloadMock).toHaveBeenCalledTimes(1));
+    const spec = startDownloadMock.mock.calls[0]![0];
+    expect(spec.resourceType).toBe('comicbook');
+    expect(spec.files[0]!.url).toBe('https://cdn/comic.zip');
+  });
+
+  it('offers the book button with the part count for a serial link', async () => {
+    clientMocks.fetchBookInfo.mockResolvedValue({
+      title: 'Сериал',
+      cover: { large: 'https://covers/book.jpeg' },
+      authors: [{ name: 'Автор' }],
+    });
+    clientMocks.fetchSerialEpisodes.mockResolvedValue([
+      { uuid: 'e1', title: 'Часть 1' },
+      { uuid: 'e2' },
+    ]);
+
+    render(<YandexImportDialog isOpen onClose={vi.fn()} />);
+    await search('https://books.yandex.ru/serials/Sx12345');
+
+    expect(await screen.findByRole('button', { name: 'Book · 2' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Book · 2' }));
+    await waitFor(() => expect(startDownloadMock).toHaveBeenCalledTimes(2));
+    const ids = startDownloadMock.mock.calls.map((call) => call[0].id).sort();
+    expect(ids).toEqual(['e1', 'e2']);
+    expect(startDownloadMock.mock.calls[0]![0].resourceType).toBe('book');
+  });
+
+  it('lists series parts and downloads a book part', async () => {
+    clientMocks.fetchSeriesInfo.mockResolvedValue({
+      title: 'Серия',
+      cover: { large: 'https://covers/series.jpeg' },
+      authors: [{ name: 'Автор' }],
+    });
+    clientMocks.fetchSeriesParts.mockResolvedValue([
+      { uuid: 'p1', title: 'Книга 1', type: 'book' },
+      { uuid: 'p2', title: 'Аудио 2', type: 'audiobook' },
+    ]);
+
+    render(<YandexImportDialog isOpen onClose={vi.fn()} />);
+    await search('https://books.yandex.ru/series/Sr12345');
+
+    expect(await screen.findByRole('button', { name: 'Book — Книга 1' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Book — Книга 1' }));
+    await waitFor(() => expect(startDownloadMock).toHaveBeenCalledTimes(1));
+    const spec = startDownloadMock.mock.calls[0]![0];
+    expect(spec.id).toBe('p1');
+    expect(spec.resourceType).toBe('book');
   });
 
   it('downloads fully to the server: submits one combined job', async () => {

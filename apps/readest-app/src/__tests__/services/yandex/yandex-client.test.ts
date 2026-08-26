@@ -33,11 +33,12 @@ beforeEach(() => {
 });
 
 describe('getYandexHeaders', () => {
-  it('sends the raw token in auth-token and app stubs', () => {
+  it('sends the raw token and the minimal app-user-agent stub', () => {
     const headers = getYandexHeaders('y0_test_token');
     expect(headers['auth-token']).toBe('y0_test_token');
     expect(headers['app-user-agent']).toBeTruthy();
-    expect(headers['onyx-preinstall']).toBe('false');
+    // The API 500s on empty-valued headers, so nothing else is sent.
+    expect(Object.keys(headers).sort()).toEqual(['app-user-agent', 'auth-token']);
   });
 });
 
