@@ -5,6 +5,7 @@ import { isReadestCloudStorageActive } from '@/services/sync/cloudSyncProvider';
 import { eventDispatcher } from '@/utils/event';
 import { fetchWithAuth } from '@/utils/fetch';
 import { getAPIBaseUrl } from '@/services/environment';
+import { getRuntimeConfig } from '@/services/runtimeConfig';
 import { useYandexServerJobsStore } from '@/store/yandexServerJobsStore';
 import type { YandexDownloadJob } from '@/store/yandexDownloadsStore';
 
@@ -81,7 +82,9 @@ export const useYandexServerJobs = () => {
   }, []);
 
   useEffect(() => {
-    if (!user) return;
+    // Without an own server there is nowhere to poll: the fallback base URL
+    // is the upstream production app, which would get spammed every 2s.
+    if (!user || !getRuntimeConfig()?.apiBaseUrl) return;
     void poll();
     const interval = setInterval(() => {
       const { settings } = useSettingsStore.getState();

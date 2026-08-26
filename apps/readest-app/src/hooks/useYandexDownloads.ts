@@ -13,6 +13,7 @@ import {
 import { updateYandexImportIndex } from '@/services/yandex/yandexImportIndex';
 import { fetchWithAuth } from '@/utils/fetch';
 import { getAPIBaseUrl } from '@/services/environment';
+import { getRuntimeConfig } from '@/services/runtimeConfig';
 import { eventDispatcher } from '@/utils/event';
 
 /**
@@ -63,10 +64,15 @@ export function useYandexDownloads() {
   const { user } = useAuth();
   const { settings } = useSettingsStore();
 
-  // The server target only makes sense when the server is actually
-  // reachable: a signed-in account, cloud storage enabled, device online.
+  // The server target only makes sense when the user's OWN server is
+  // configured: a signed-in account, cloud storage enabled, device online.
+  // Without an own apiBaseUrl the fallback base is the upstream production
+  // web app, which would reject the job (500) instead of downloading.
   const canDownloadToServer =
-    !!user && isReadestCloudStorageActive(settings) && navigator.onLine !== false;
+    !!getRuntimeConfig()?.apiBaseUrl &&
+    !!user &&
+    isReadestCloudStorageActive(settings) &&
+    navigator.onLine !== false;
 
   const startDownload = useCallback(
     async (
