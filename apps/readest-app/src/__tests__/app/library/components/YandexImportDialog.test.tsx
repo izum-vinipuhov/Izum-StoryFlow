@@ -113,6 +113,9 @@ beforeEach(() => {
   canDownloadToServerMock.mockReturnValue(true);
   withToken();
   clientMocks.fetchBookInfo.mockReset();
+  // Series search resolves audiobook variants through this call; a
+  // permissive default keeps tests that don't exercise it from tripping.
+  clientMocks.fetchBookInfo.mockResolvedValue({ title: '', linked_audiobook_uuids: [] });
   clientMocks.fetchAudiobookInfo.mockReset();
   // Series search resolves ebook variants through this call; a permissive
   // default keeps tests that don't exercise it from tripping the .catch.
@@ -392,6 +395,43 @@ describe('YandexImportDialog', () => {
     await waitFor(() => expect(startDownloadMock).toHaveBeenCalledTimes(1));
     const spec = startDownloadMock.mock.calls[0]![0];
     expect(spec.id).toBe('p1::audiobook');
+    expect(spec.resourceType).toBe('audiobook');
+  });
+
+  it('offers the audiobook variant of a book series part', async () => {
+    clientMocks.fetchSeriesInfo.mockResolvedValue({
+      title: 'Воспоминания о прошлом Земли',
+      cover: { large: 'https://covers/series.jpeg' },
+      authors: [{ name: 'Лю Цысинь' }],
+    });
+    clientMocks.fetchSeriesParts.mockResolvedValue([
+      { uuid: 'oujEHVbD', title: 'Темный лес', type: 'Book' },
+    ]);
+    clientMocks.fetchBookInfo.mockResolvedValue({
+      title: 'Темный лес',
+      cover: { large: 'https://covers/book.jpeg' },
+      authors: [{ name: 'Лю Цысинь' }],
+      linked_audiobook_uuids: ['soAbTuxm'],
+    });
+    clientMocks.fetchAudiobookInfo.mockResolvedValue({
+      title: 'Тёмный лес',
+      duration: 100,
+      cover: { large: 'https://covers/audiobook.jpeg' },
+      authors: [{ name: 'Лю Цысинь' }],
+    });
+    clientMocks.fetchTracks.mockResolvedValue([
+      { number: 0, offline: { max_bit_rate: { url: 'https://cdn/1.m3u8' } } },
+    ]);
+
+    render(<YandexImportDialog isOpen onClose={vi.fn()} />);
+    await search('https://books.yandex.ru/series/bQVVOzUG');
+
+    expect(await screen.findByText('Темный лес')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Book' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Audiobook' }));
+    await waitFor(() => expect(startDownloadMock).toHaveBeenCalledTimes(1));
+    const spec = startDownloadMock.mock.calls[0]![0];
+    expect(spec.id).toBe('soAbTuxm::audiobook');
     expect(spec.resourceType).toBe('audiobook');
   });
 

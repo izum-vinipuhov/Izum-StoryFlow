@@ -12,6 +12,8 @@ export interface YandexBookInfo {
   cover?: YandexCover;
   /** A plain string on /books/{uuid}, unlike the audiobook's array shape. */
   authors?: Array<YandexPerson | string> | string;
+  /** Audiobook variants of the same title (the web's «Слушать» button). */
+  linked_audiobook_uuids?: string[];
 }
 
 export interface YandexAudiobookInfo {
@@ -76,4 +78,7 @@ export interface YandexSeriesPart {
   /** Resolved ebook variant of an audiobook part (linked uuid or a catalogue
    * search match by title) — set by the dialog at search time. */
   bookUuid?: string;
+  /** Resolved audiobook variant of a book part (linked_audiobook_uuids or a
+   * catalogue search match by title) — set by the dialog at search time. */
+  audiobookUuid?: string;
 }

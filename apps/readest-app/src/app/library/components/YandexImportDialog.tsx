@@ -104,6 +104,8 @@ interface SearchInfo {
     partsAvailable: Record<string, boolean>;
     /** resolved ebook-variant uuid → already present on this device. */
     booksAvailable: Record<string, boolean>;
+    /** resolved audiobook-variant uuid → already present on this device. */
+    audiobooksAvailable: Record<string, boolean>;
   };
 }
 
@@ -239,18 +241,34 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
           // same fallback the single-link search uses: exact title match.
           const resolvedParts = await Promise.all(
             parts.map(async (part) => {
-              if (seriesPartType(part) !== 'audiobook') return part;
-              const abInfo = await fetchAudiobookInfo(part.uuid, token).catch(() => null);
-              if (!abInfo) return part;
-              const linked = abInfo.linked_book_uuids?.[0];
-              if (linked) return { ...part, bookUuid: linked };
-              const title = normalizeYandexTitle(abInfo.title ?? '');
-              if (!title) return part;
-              const hits = await searchYandexBooks(abInfo.title, token).catch(() => []);
-              const hit = hits.find(
-                (h) => h.type === 'book' && normalizeYandexTitle(h.name) === title,
-              );
-              return hit ? { ...part, bookUuid: hit.uuid } : part;
+              const type = seriesPartType(part);
+              if (type === 'audiobook') {
+                const abInfo = await fetchAudiobookInfo(part.uuid, token).catch(() => null);
+                if (!abInfo) return part;
+                const linked = abInfo.linked_book_uuids?.[0];
+                if (linked) return { ...part, bookUuid: linked };
+                const title = normalizeYandexTitle(abInfo.title ?? '');
+                if (!title) return part;
+                const hits = await searchYandexBooks(abInfo.title, token).catch(() => []);
+                const hit = hits.find(
+                  (h) => h.type === 'book' && normalizeYandexTitle(h.name) === title,
+                );
+                return hit ? { ...part, bookUuid: hit.uuid } : part;
+              }
+              if (type === 'book') {
+                const bookInfo = await fetchBookInfo(part.uuid, token).catch(() => null);
+                if (!bookInfo) return part;
+                const linked = bookInfo.linked_audiobook_uuids?.[0];
+                if (linked) return { ...part, audiobookUuid: linked };
+                const title = normalizeYandexTitle(bookInfo.title ?? '');
+                if (!title) return part;
+                const hits = await searchYandexBooks(bookInfo.title, token).catch(() => []);
+                const hit = hits.find(
+                  (h) => h.type === 'audiobook' && normalizeYandexTitle(h.name) === title,
+                );
+                return hit ? { ...part, audiobookUuid: hit.uuid } : part;
+              }
+              return part;
             }),
           );
           nextInfo.series = {
@@ -263,6 +281,11 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
               resolvedParts
                 .filter((part) => part.bookUuid)
                 .map((part) => [part.bookUuid!, stampedUuids.has(part.bookUuid!)]),
+            ),
+            audiobooksAvailable: Object.fromEntries(
+              resolvedParts
+                .filter((part) => part.audiobookUuid)
+                .map((part) => [part.audiobookUuid!, stampedUuids.has(part.audiobookUuid!)]),
             ),
           };
         }
@@ -635,37 +658,54 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
         );
         return;
       }
-      const abInfo = await fetchAudiobookInfo(part.uuid, token);
-      const tracks = (await fetchTracks(part.uuid, token)).filter((track) => getChapterUrl(track));
-      const chapters = buildChapters(tracks);
-      const hash = getAudiobookManifestHash(
-        chapters.map(({ title: t, durationSec }) => ({ title: t, durationSec })),
-      );
-      await startDownload(
-        {
-          id: `${part.uuid}::audiobook`,
-          resourceType: 'audiobook',
-          title: abInfo.title,
-          author: getAuthors(abInfo),
-          coverUrl: abInfo.cover?.large ?? cover,
-          files: tracks.map((track, index) => ({
-            name: `chapter_${String(index + 1).padStart(3, '0')}.m4a`,
-            url: getChapterUrl(track)!,
-            path: getAudiobookChapterPath(hash, index),
-            base: 'Books',
-          })),
-          audiobook: { hash, chapters },
-        },
-        { target: downloadTarget },
-      );
+      await startSeriesAudiobookDownload(part.uuid, cover);
     } catch (e) {
       setError(e instanceof Error ? _(e.message) : _('Could not fetch this book'));
     }
   };
 
+  /** Resolve an audiobook by uuid and start the standalone audiobook job. */
+  const startSeriesAudiobookDownload = async (uuid: string, fallbackCover: string) => {
+    const token = getYandexAccessToken(settings);
+    const abInfo = await fetchAudiobookInfo(uuid, token);
+    const tracks = (await fetchTracks(uuid, token)).filter((track) => getChapterUrl(track));
+    const chapters = buildChapters(tracks);
+    const hash = getAudiobookManifestHash(
+      chapters.map(({ title: t, durationSec }) => ({ title: t, durationSec })),
+    );
+    await startDownload(
+      {
+        id: `${uuid}::audiobook`,
+        resourceType: 'audiobook',
+        title: abInfo.title,
+        author: getAuthors(abInfo),
+        coverUrl: abInfo.cover?.large ?? fallbackCover,
+        files: tracks.map((track, index) => ({
+          name: `chapter_${String(index + 1).padStart(3, '0')}.m4a`,
+          url: getChapterUrl(track)!,
+          path: getAudiobookChapterPath(hash, index),
+          base: 'Books',
+        })),
+        audiobook: { hash, chapters },
+      },
+      { target: downloadTarget },
+    );
+  };
+
   const startSeriesPartsDownload = async (parts: YandexSeriesPart[]) => {
     for (const part of parts) {
       await startSeriesPartDownload(part);
+    }
+  };
+
+  /** Download the resolved audiobook variant of a book series part. */
+  const startSeriesAudiobookVariantDownload = async (part: YandexSeriesPart) => {
+    if (!info?.series || !part.audiobookUuid) return;
+    const cover = part.cover?.large ?? info.series.info.cover?.large ?? '';
+    try {
+      await startSeriesAudiobookDownload(part.audiobookUuid, cover);
+    } catch (e) {
+      setError(e instanceof Error ? _(e.message) : _('Could not fetch this book'));
     }
   };
 
@@ -1192,6 +1232,24 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
                             </p>
                           </div>
                           <div className='flex shrink-0 items-center gap-1'>
+                            {type === 'book' && part.audiobookUuid && (
+                              <div className='flex flex-col items-stretch gap-1'>
+                                {extraPartCell(
+                                  part.uuid,
+                                  seriesTypeLabel(type),
+                                  seriesTypeIcon(type),
+                                  () => void startSeriesPartDownload(part),
+                                  info.series!.partsAvailable[part.uuid],
+                                )}
+                                {extraPartCell(
+                                  `${part.audiobookUuid}::audiobook`,
+                                  _('Audiobook'),
+                                  <RiHeadphoneFill className='h-4 w-4' />,
+                                  () => void startSeriesAudiobookVariantDownload(part),
+                                  info.series!.audiobooksAvailable[part.audiobookUuid],
+                                )}
+                              </div>
+                            )}
                             {type === 'audiobook' && part.bookUuid && (
                               <div className='flex flex-col items-stretch gap-1'>
                                 {extraPartCell(
@@ -1210,7 +1268,10 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
                                 )}
                               </div>
                             )}
-                            {!(type === 'audiobook' && part.bookUuid) &&
+                            {!(
+                              (type === 'audiobook' && part.bookUuid) ||
+                              (type === 'book' && part.audiobookUuid)
+                            ) &&
                               extraPartCell(
                                 part.uuid,
                                 seriesTypeLabel(type),
@@ -1239,7 +1300,15 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
                     const booksDone =
                       available(bookParts) &&
                       bookVariants.every((part) => info.series!.booksAvailable[part.bookUuid!]);
-                    const audioDone = available(audioParts);
+                    const audioVariants = info.series.parts.filter(
+                      (part) => seriesPartType(part) === 'book' && part.audiobookUuid,
+                    );
+                    const audioCount = audioParts.length + audioVariants.length;
+                    const audioDone =
+                      available(audioParts) &&
+                      audioVariants.every(
+                        (part) => info.series!.audiobooksAvailable[part.audiobookUuid!],
+                      );
                     const everythingDone = booksDone && audioDone && available(info.series.parts);
                     return (
                       <>
@@ -1259,15 +1328,20 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
                             {`${_('Book')} · ${bookCount}`}
                           </button>
                         )}
-                        {audioParts.length > 0 && !audioDone && (
+                        {audioCount > 0 && !audioDone && (
                           <button
                             type='button'
                             className='btn btn-contrast btn-sm'
-                            onClick={() => void startSeriesPartsDownload(audioParts)}
+                            onClick={() => {
+                              void startSeriesPartsDownload(audioParts);
+                              for (const part of audioVariants) {
+                                void startSeriesAudiobookVariantDownload(part);
+                              }
+                            }}
                           >
                             <MdDownload className='h-4 w-4' />
                             <RiHeadphoneFill className='h-4 w-4' />
-                            {`${_('Audiobook')} · ${audioParts.length}`}
+                            {`${_('Audiobook')} · ${audioCount}`}
                           </button>
                         )}
                         {!everythingDone && (
