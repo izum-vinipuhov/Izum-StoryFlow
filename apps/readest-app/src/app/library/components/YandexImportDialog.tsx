@@ -637,6 +637,21 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
     }
   };
 
+  const startSeriesPartsDownload = async (parts: YandexSeriesPart[]) => {
+    for (const part of parts) {
+      await startSeriesPartDownload(part);
+    }
+  };
+
+  const seriesTypeLabel = (type: 'book' | 'audiobook' | 'comicbook') =>
+    type === 'audiobook' ? _('Audiobook') : type === 'comicbook' ? _('Comicbook') : _('Book');
+  const seriesTypeIcon = (type: 'book' | 'audiobook' | 'comicbook') =>
+    type === 'audiobook' ? (
+      <RiHeadphoneFill className='h-4 w-4' />
+    ) : (
+      <RiBook2Fill className='h-4 w-4' />
+    );
+
   // A per-id job row lookup for the extra part types (comic / serial / series
   // parts), which are not covered by the book/audiobook availability snapshot.
   const extraJob = (id: string): YandexDownloadJob | undefined =>
@@ -1094,32 +1109,92 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
                         (episode) => info.serial?.episodesAvailable[episode.uuid],
                       ),
                     )}
-                  {info.series?.parts.map((part) => {
-                    const type = seriesPartType(part);
-                    const icon =
-                      type === 'audiobook' ? (
-                        <RiHeadphoneFill className='h-4 w-4' />
-                      ) : (
-                        <RiBook2Fill className='h-4 w-4' />
+                </div>
+              )}
+              {info.series && (
+                <div className='flex flex-col gap-2'>
+                  <div className='flex max-h-80 flex-col gap-2 overflow-y-auto pr-1'>
+                    {info.series.parts.map((part) => {
+                      const type = seriesPartType(part);
+                      return (
+                        <div
+                          key={part.uuid}
+                          className='flex items-center gap-3 rounded-lg border border-base-200 p-2 eink-bordered'
+                        >
+                          {part.cover?.large && (
+                            <img
+                              src={part.cover.large}
+                              alt=''
+                              className='h-16 w-11 shrink-0 rounded object-cover shadow'
+                            />
+                          )}
+                          <div className='flex min-w-0 flex-1 flex-col gap-0.5'>
+                            <p className='truncate text-sm font-medium'>
+                              {part.title ?? info.series!.info.title}
+                            </p>
+                            <p className='text-base-content/60 truncate text-xs'>
+                              {seriesTypeLabel(type)}
+                            </p>
+                          </div>
+                          {extraPartCell(
+                            part.uuid,
+                            seriesTypeLabel(type),
+                            seriesTypeIcon(type),
+                            () => void startSeriesPartDownload(part),
+                            info.series!.partsAvailable[part.uuid],
+                          )}
+                        </div>
                       );
-                    const label =
-                      type === 'audiobook'
-                        ? _('Audiobook')
-                        : type === 'comicbook'
-                          ? _('Comicbook')
-                          : _('Book');
-                    return (
-                      <div key={part.uuid} className='contents'>
-                        {extraPartCell(
-                          part.uuid,
-                          `${label} — ${part.title ?? ''}`,
-                          icon,
-                          () => void startSeriesPartDownload(part),
-                          info.series?.partsAvailable[part.uuid],
-                        )}
-                      </div>
+                    })}
+                  </div>
+                  {(() => {
+                    const bookParts = info.series.parts.filter(
+                      (part) => seriesPartType(part) === 'book',
                     );
-                  })}
+                    const audioParts = info.series.parts.filter(
+                      (part) => seriesPartType(part) === 'audiobook',
+                    );
+                    const available = (parts: YandexSeriesPart[]) =>
+                      parts.every((part) => info.series!.partsAvailable[part.uuid]);
+                    const allAvailable = available(info.series.parts);
+                    return (
+                      <>
+                        {bookParts.length > 0 && (
+                          <button
+                            type='button'
+                            className='btn btn-contrast btn-sm'
+                            disabled={available(bookParts)}
+                            onClick={() => void startSeriesPartsDownload(bookParts)}
+                          >
+                            <MdDownload className='h-4 w-4' />
+                            <RiBook2Fill className='h-4 w-4' />
+                            {`${_('Book')} · ${bookParts.length}`}
+                          </button>
+                        )}
+                        {audioParts.length > 0 && (
+                          <button
+                            type='button'
+                            className='btn btn-contrast btn-sm'
+                            disabled={available(audioParts)}
+                            onClick={() => void startSeriesPartsDownload(audioParts)}
+                          >
+                            <MdDownload className='h-4 w-4' />
+                            <RiHeadphoneFill className='h-4 w-4' />
+                            {`${_('Audiobook')} · ${audioParts.length}`}
+                          </button>
+                        )}
+                        <button
+                          type='button'
+                          className='btn btn-primary btn-sm w-full'
+                          disabled={allAvailable}
+                          onClick={() => void startSeriesPartsDownload(info.series!.parts)}
+                        >
+                          <MdDownload className='h-4 w-4' />
+                          {_('Download Fully')}
+                        </button>
+                      </>
+                    );
+                  })()}
                 </div>
               )}
               {showDownloadFully && (

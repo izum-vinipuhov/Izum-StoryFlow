@@ -354,8 +354,8 @@ describe('YandexImportDialog', () => {
     render(<YandexImportDialog isOpen onClose={vi.fn()} />);
     await search('https://books.yandex.ru/series/Sr12345');
 
-    expect(await screen.findByRole('button', { name: 'Book — Книга 1' })).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Book — Книга 1' }));
+    expect(await screen.findByText('Книга 1')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Book' }));
     await waitFor(() => expect(startDownloadMock).toHaveBeenCalledTimes(1));
     const spec = startDownloadMock.mock.calls[0]![0];
     expect(spec.id).toBe('p1');
@@ -384,8 +384,8 @@ describe('YandexImportDialog', () => {
     render(<YandexImportDialog isOpen onClose={vi.fn()} />);
     await search('https://books.yandex.ru/series/H31ocIEP');
 
-    const button = await screen.findByRole('button', { name: 'Audiobook — Тёмный лес' });
-    fireEvent.click(button);
+    expect(await screen.findByText('Тёмный лес')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Audiobook' }));
     await waitFor(() => expect(startDownloadMock).toHaveBeenCalledTimes(1));
     const spec = startDownloadMock.mock.calls[0]![0];
     expect(spec.id).toBe('p1::audiobook');
@@ -411,7 +411,8 @@ describe('YandexImportDialog', () => {
     render(<YandexImportDialog isOpen onClose={vi.fn()} />);
     await search('https://books.yandex.ru/series/Sr12345');
 
-    const button = await screen.findByRole('button', { name: 'Book — Книга 1' });
+    expect(await screen.findByText('Книга 1')).toBeTruthy();
+    const button = screen.getByRole('button', { name: 'Book' });
     expect(button.getAttribute('disabled')).toBeDefined();
     fireEvent.click(button);
     expect(startDownloadMock).not.toHaveBeenCalled();
