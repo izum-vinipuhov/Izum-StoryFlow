@@ -1202,7 +1202,7 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
                                   info.series!.booksAvailable[part.bookUuid],
                                 )}
                                 {extraPartCell(
-                                  part.uuid,
+                                  `${part.uuid}::audiobook`,
                                   seriesTypeLabel(type),
                                   seriesTypeIcon(type),
                                   () => void startSeriesPartDownload(part),
@@ -1236,19 +1236,17 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
                     );
                     const available = (parts: YandexSeriesPart[]) =>
                       parts.every((part) => info.series!.partsAvailable[part.uuid]);
-                    const allAvailable = available(info.series.parts);
+                    const booksDone =
+                      available(bookParts) &&
+                      bookVariants.every((part) => info.series!.booksAvailable[part.bookUuid!]);
+                    const audioDone = available(audioParts);
+                    const everythingDone = booksDone && audioDone && available(info.series.parts);
                     return (
                       <>
-                        {bookCount > 0 && (
+                        {bookCount > 0 && !booksDone && (
                           <button
                             type='button'
                             className='btn btn-contrast btn-sm'
-                            disabled={
-                              available(bookParts) &&
-                              bookVariants.every(
-                                (part) => info.series!.booksAvailable[part.bookUuid!],
-                              )
-                            }
                             onClick={() => {
                               void startSeriesPartsDownload(bookParts);
                               for (const part of bookVariants) {
@@ -1261,11 +1259,10 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
                             {`${_('Book')} · ${bookCount}`}
                           </button>
                         )}
-                        {audioParts.length > 0 && (
+                        {audioParts.length > 0 && !audioDone && (
                           <button
                             type='button'
                             className='btn btn-contrast btn-sm'
-                            disabled={available(audioParts)}
                             onClick={() => void startSeriesPartsDownload(audioParts)}
                           >
                             <MdDownload className='h-4 w-4' />
@@ -1273,15 +1270,16 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
                             {`${_('Audiobook')} · ${audioParts.length}`}
                           </button>
                         )}
-                        <button
-                          type='button'
-                          className='btn btn-primary btn-sm w-full'
-                          disabled={allAvailable}
-                          onClick={() => void startSeriesPartsDownload(info.series!.parts)}
-                        >
-                          <MdDownload className='h-4 w-4' />
-                          {_('Download Fully')}
-                        </button>
+                        {!everythingDone && (
+                          <button
+                            type='button'
+                            className='btn btn-primary btn-sm w-full'
+                            onClick={() => void startSeriesPartsDownload(info.series!.parts)}
+                          >
+                            <MdDownload className='h-4 w-4' />
+                            {_('Download Fully')}
+                          </button>
+                        )}
                       </>
                     );
                   })()}

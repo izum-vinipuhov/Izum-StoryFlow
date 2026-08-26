@@ -419,6 +419,9 @@ describe('YandexImportDialog', () => {
     expect(button.getAttribute('disabled')).toBeDefined();
     fireEvent.click(button);
     expect(startDownloadMock).not.toHaveBeenCalled();
+    // Everything is downloaded — the aggregate buttons are gone entirely.
+    expect(screen.queryByRole('button', { name: 'Book · 1' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Download Fully' })).toBeNull();
   });
 
   it('downloads fully to the server: submits one combined job', async () => {
