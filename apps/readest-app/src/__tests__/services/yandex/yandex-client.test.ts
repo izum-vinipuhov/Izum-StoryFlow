@@ -17,6 +17,7 @@ import {
   YANDEX_TOKEN_ERROR,
   fetchAudiobookInfo,
   fetchBookInfo,
+  fetchSeriesParts,
   fetchTracks,
   getChapterUrl,
   getProxiedYandexURL,
@@ -76,6 +77,41 @@ describe('fetchBookInfo', () => {
   it('throws the token error on 401', async () => {
     mockTauriFetch.mockResolvedValue(new Response(null, { status: 401 }));
     await expect(fetchBookInfo('Abc123', 'bad')).rejects.toThrow(YANDEX_TOKEN_ERROR);
+  });
+});
+
+describe('fetchSeriesParts', () => {
+  it('flattens the nested resource wrapper of the parts list', async () => {
+    mockTauriFetch.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          parts: [
+            { position: 0, resource: { uuid: 'p1', title: 'Книга 1', type: 'Book' } },
+            { position: 1, resource: { uuid: 'p2', title: 'Тёмный лес', can_be_listened: true } },
+            { position: 2, resource: { uuid: 'p3', title: 'Комикс' } },
+          ],
+        }),
+        { status: 200 },
+      ),
+    );
+    const parts = await fetchSeriesParts('Sr12345', 'tok');
+    expect(parts).toHaveLength(3);
+    expect(parts[0]).toMatchObject({ uuid: 'p1', title: 'Книга 1', type: 'Book', position: 0 });
+    expect(parts[1]).toMatchObject({ uuid: 'p2', title: 'Тёмный лес', can_be_listened: true });
+    expect(parts[2]!.uuid).toBe('p3');
+    expect(mockTauriFetch).toHaveBeenCalledWith(
+      `${YANDEX_API_BASE}/series/Sr12345/parts`,
+      expect.anything(),
+    );
+  });
+
+  it('drops parts without a resource uuid', async () => {
+    mockTauriFetch.mockResolvedValue(
+      new Response(JSON.stringify({ parts: [{ position: 0, resource: { title: 'нет uuid' } }] }), {
+        status: 200,
+      }),
+    );
+    expect(await fetchSeriesParts('Sr12345', 'tok')).toEqual([]);
   });
 });
 

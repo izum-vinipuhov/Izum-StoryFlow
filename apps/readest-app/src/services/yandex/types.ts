@@ -71,4 +71,6 @@ export interface YandexSeriesPart {
   cover?: YandexCover;
   can_be_listened?: boolean;
   can_be_read?: boolean;
+  /** Position within the series (from the REST parts wrapper). */
+  position?: number;
 }

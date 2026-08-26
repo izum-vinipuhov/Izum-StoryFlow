@@ -434,8 +434,15 @@ export const fetchSeriesParts = async (
   uuid: string,
   token: string,
 ): Promise<YandexSeriesPart[]> => {
+  // The parts list wraps every resource: {position, position_label,
+  // resource: {uuid, title, type, can_be_listened, ...}} — flatten it so
+  // callers see the resource fields on the part itself.
   const data = (await fetchYandexJson(`/series/${uuid}/parts`, token)) as {
-    parts?: YandexSeriesPart[];
+    parts?: Array<{ position?: number; resource?: YandexSeriesPart }>;
   };
-  return data?.parts ?? [];
+  return (data?.parts ?? []).flatMap((part) => {
+    const resource = part.resource;
+    if (!resource?.uuid) return [];
+    return [{ ...resource, position: part.position }];
+  });
 };
