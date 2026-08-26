@@ -59,19 +59,11 @@ export const isSupportedYandexType = (type: YandexResourceType): boolean =>
   type === 'book' || type === 'audiobook';
 
 export const getYandexHeaders = (token: string): Record<string, string> => ({
+  // Keep in sync with serverFetch.fetchYandexResource: the API 500s on the
+  // empty-valued headers (mcc/mnc/imei/accept-encoding/...), so only the
+  // minimal working set is sent.
   'app-user-agent': YANDEX_APP_USER_AGENTS[0]!,
-  mcc: '',
-  mnc: '',
-  imei: '',
-  'subscription-country': '',
-  'app-locale': '',
-  'bookmate-version': '',
-  'bookmate-websocket-version': '',
-  'device-idfa': '',
-  'onyx-preinstall': 'false',
   'auth-token': token,
-  'accept-encoding': '',
-  'user-agent': '',
 });
 
 export const getYandexAccessToken = (settings: SystemSettings | undefined): string =>
