@@ -14,6 +14,7 @@ import { updateYandexImportIndex } from '@/services/yandex/yandexImportIndex';
 import { fetchWithAuth } from '@/utils/fetch';
 import { getAPIBaseUrl } from '@/services/environment';
 import { getRuntimeConfig } from '@/services/runtimeConfig';
+import { getCachedYandexToken } from '@/services/yandex/yandexTokenVault';
 import { eventDispatcher } from '@/utils/event';
 
 /**
@@ -33,7 +34,9 @@ const toastError = (message: string) => {
  */
 const startServerDownload = async (spec: YandexJobSpec): Promise<void> => {
   const { settings } = useSettingsStore.getState();
-  const token = settings.yandexBooks?.accessToken ?? '';
+  // The token lives in the OS keychain on Tauri — the settings field is
+  // empty there. The dialog hydrates the cache before starting downloads.
+  const token = getCachedYandexToken() ?? settings.yandexBooks?.accessToken ?? '';
   await fetchWithAuth(`${getAPIBaseUrl()}/yandex/jobs`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
