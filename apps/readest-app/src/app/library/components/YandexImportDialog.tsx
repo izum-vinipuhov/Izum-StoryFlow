@@ -23,6 +23,7 @@ import {
   cancelServerJob,
   dismissServerJob,
   pauseServerJob,
+  pollServerJobsOnce,
   resumeServerJob,
 } from '@/hooks/useYandexServerJobs';
 import { formatBytes } from '@/utils/book';
@@ -576,26 +577,31 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
   const startSerialDownload = async () => {
     if (!info?.serial) return;
     const serial = info.serial;
-    for (const [index, episode] of serial.episodes.entries()) {
-      void startDownload(
-        {
-          id: episode.uuid,
-          resourceType: 'book',
-          title: episode.title ?? `${serial.title} — ${index + 1}`,
-          author: serial.author,
-          coverUrl: serial.coverUrl,
-          files: [
+    await runBatchDownloads(
+      serial.episodes.map((episode, index) => ({
+        id: episode.uuid,
+        run: async () => {
+          await startDownload(
             {
-              name: `${episode.uuid}.epub`,
-              url: `${YANDEX_API_BASE}/books/${episode.uuid}/content/v4`,
-              path: `${episode.uuid}.epub`,
-              base: 'Cache',
+              id: episode.uuid,
+              resourceType: 'book',
+              title: episode.title ?? `${serial.title} — ${index + 1}`,
+              author: serial.author,
+              coverUrl: serial.coverUrl,
+              files: [
+                {
+                  name: `${episode.uuid}.epub`,
+                  url: `${YANDEX_API_BASE}/books/${episode.uuid}/content/v4`,
+                  path: `${episode.uuid}.epub`,
+                  base: 'Cache',
+                },
+              ],
             },
-          ],
+            { target: downloadTarget },
+          );
         },
-        { target: downloadTarget },
-      );
-    }
+      })),
+    );
   };
 
   const seriesPartType = (part: YandexSeriesPart): 'book' | 'audiobook' | 'comicbook' => {
@@ -692,9 +698,32 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
     );
   };
 
-  const startSeriesPartsDownload = async (parts: YandexSeriesPart[]) => {
-    for (const part of parts) {
-      await startSeriesPartDownload(part);
+  /**
+   * The server caps concurrent Yandex jobs per user (2), so a batch of
+   * series/serial parts must be submitted one at a time and each one
+   * awaited. Locally the manager runs jobs in parallel and needs no
+   * sequencing.
+   */
+  const waitForServerJob = async (id: string): Promise<void> => {
+    for (;;) {
+      await pollServerJobsOnce();
+      const job = useYandexServerJobsStore
+        .getState()
+        .serverJobs.find((candidate) => candidate.id === id);
+      if (job?.status === 'completed') return;
+      if (job?.status === 'failed') {
+        throw new Error(job.error ?? _('Could not download on the server'));
+      }
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    }
+  };
+
+  const runBatchDownloads = async (
+    actions: Array<{ id: string; run: () => Promise<void> }>,
+  ): Promise<void> => {
+    for (const action of actions) {
+      await action.run();
+      if (downloadTarget === 'server') await waitForServerJob(action.id);
     }
   };
 
@@ -1317,10 +1346,16 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
                             type='button'
                             className='btn btn-contrast btn-sm'
                             onClick={() => {
-                              void startSeriesPartsDownload(bookParts);
-                              for (const part of bookVariants) {
-                                void startSeriesBookVariantDownload(part);
-                              }
+                              void runBatchDownloads([
+                                ...bookParts.map((part) => ({
+                                  id: part.uuid,
+                                  run: () => startSeriesPartDownload(part),
+                                })),
+                                ...bookVariants.map((part) => ({
+                                  id: part.bookUuid!,
+                                  run: () => startSeriesBookVariantDownload(part),
+                                })),
+                              ]);
                             }}
                           >
                             <MdDownload className='h-4 w-4' />
@@ -1333,10 +1368,16 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
                             type='button'
                             className='btn btn-contrast btn-sm'
                             onClick={() => {
-                              void startSeriesPartsDownload(audioParts);
-                              for (const part of audioVariants) {
-                                void startSeriesAudiobookVariantDownload(part);
-                              }
+                              void runBatchDownloads([
+                                ...audioParts.map((part) => ({
+                                  id: `${part.uuid}::audiobook`,
+                                  run: () => startSeriesPartDownload(part),
+                                })),
+                                ...audioVariants.map((part) => ({
+                                  id: `${part.audiobookUuid}::audiobook`,
+                                  run: () => startSeriesAudiobookVariantDownload(part),
+                                })),
+                              ]);
                             }}
                           >
                             <MdDownload className='h-4 w-4' />
@@ -1348,7 +1389,35 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
                           <button
                             type='button'
                             className='btn btn-primary btn-sm w-full'
-                            onClick={() => void startSeriesPartsDownload(info.series!.parts)}
+                            onClick={() => {
+                              const all = info.series!.parts;
+                              void runBatchDownloads([
+                                ...all
+                                  .filter(
+                                    (part) =>
+                                      seriesPartType(part) !== 'audiobook' || !part.bookUuid,
+                                  )
+                                  .map((part) => ({
+                                    id:
+                                      seriesPartType(part) === 'audiobook'
+                                        ? `${part.uuid}::audiobook`
+                                        : part.uuid,
+                                    run: () => startSeriesPartDownload(part),
+                                  })),
+                                ...all
+                                  .filter((part) => part.bookUuid)
+                                  .map((part) => ({
+                                    id: part.bookUuid!,
+                                    run: () => startSeriesBookVariantDownload(part),
+                                  })),
+                                ...all
+                                  .filter((part) => part.audiobookUuid)
+                                  .map((part) => ({
+                                    id: `${part.audiobookUuid}::audiobook`,
+                                    run: () => startSeriesAudiobookVariantDownload(part),
+                                  })),
+                              ]);
+                            }}
                           >
                             <MdDownload className='h-4 w-4' />
                             {_('Download Fully')}

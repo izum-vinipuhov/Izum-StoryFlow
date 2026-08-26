@@ -325,6 +325,7 @@ describe('YandexImportDialog', () => {
   });
 
   it('offers the book button with the part count for a serial link', async () => {
+    canDownloadToServerMock.mockReturnValue(false);
     clientMocks.fetchBookInfo.mockResolvedValue({
       title: 'Сериал',
       cover: { large: 'https://covers/book.jpeg' },
@@ -347,6 +348,7 @@ describe('YandexImportDialog', () => {
   });
 
   it('lists series parts and downloads a book part', async () => {
+    canDownloadToServerMock.mockReturnValue(false);
     clientMocks.fetchSeriesInfo.mockResolvedValue({
       title: 'Серия',
       cover: { large: 'https://covers/series.jpeg' },
@@ -369,6 +371,7 @@ describe('YandexImportDialog', () => {
   });
 
   it('detects audiobook series parts without a type field', async () => {
+    canDownloadToServerMock.mockReturnValue(false);
     clientMocks.fetchSeriesInfo.mockResolvedValue({
       title: 'Воспоминания о прошлом Земли',
       cover: { large: 'https://covers/series.jpeg' },
@@ -399,6 +402,7 @@ describe('YandexImportDialog', () => {
   });
 
   it('offers the audiobook variant of a book series part', async () => {
+    canDownloadToServerMock.mockReturnValue(false);
     clientMocks.fetchSeriesInfo.mockResolvedValue({
       title: 'Воспоминания о прошлом Земли',
       cover: { large: 'https://covers/series.jpeg' },

@@ -40,6 +40,12 @@ const pollServerJobs = async (completedIdsRef: { current: Set<string> } | null =
   }
 };
 
+/**
+ * One polling pass exported for callers that need to await a job's
+ * completion without mounting the hook (e.g. sequential series downloads).
+ */
+export const pollServerJobsOnce = pollServerJobs;
+
 const postServerJobAction = async (id: string, action: string, token?: string) => {
   await fetchWithAuth(jobsUrl(id), {
     method: 'POST',
