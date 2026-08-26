@@ -66,7 +66,9 @@ export interface YandexSeriesInfo {
 export interface YandexSeriesPart {
   uuid: string;
   title?: string;
-  /** 'book' | 'audiobook' | 'comicbook'; detected from the resource keys when absent. */
+  /** 'Book' for books; audiobook parts have no type but can_be_listened. */
   type?: string;
   cover?: YandexCover;
+  can_be_listened?: boolean;
+  can_be_read?: boolean;
 }

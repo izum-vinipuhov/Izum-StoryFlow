@@ -88,9 +88,21 @@ interface SearchInfo {
   };
   comicbook?: { info: YandexComicbookInfo; zipUrl: string };
   /** A multi-part text book: each episode downloads as its own book. */
-  serial?: { title: string; author: string; coverUrl: string; episodes: YandexSerialEpisode[] };
+  serial?: {
+    title: string;
+    author: string;
+    coverUrl: string;
+    episodes: YandexSerialEpisode[];
+    /** episode uuid → already present on this device. */
+    episodesAvailable: Record<string, boolean>;
+  };
   /** A series of independent resources (books / audiobooks / comics). */
-  series?: { info: YandexSeriesInfo; parts: YandexSeriesPart[] };
+  series?: {
+    info: YandexSeriesInfo;
+    parts: YandexSeriesPart[];
+    /** part uuid → already present on this device. */
+    partsAvailable: Record<string, boolean>;
+  };
 }
 
 type YandexPartKey = 'book' | 'audiobook' | 'comicbook' | 'serial' | 'series';
@@ -177,6 +189,22 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
     try {
       if (parsed.type === 'comicbook' || parsed.type === 'serial' || parsed.type === 'series') {
         const nextInfo: SearchInfo = { uuid: parsed.uuid };
+        // Which Yandex resources already have real files on this device: the
+        // library rows carry the origin stamp (uuid of the resource that
+        // produced the book), and the files must actually exist.
+        const stamped = useLibraryStore
+          .getState()
+          .library.filter((b) => !b.deletedAt && b.metadata?.yandex);
+        const availableStamped = appService
+          ? (
+              await Promise.all(
+                stamped.map(async (b) => ((await appService.isBookAvailable(b)) ? b : null)),
+              )
+            ).filter((b): b is NonNullable<typeof b> => b !== null)
+          : [];
+        const stampedUuids = new Set(
+          availableStamped.map((b) => b.metadata?.yandex?.uuid).filter((u): u is string => !!u),
+        );
         if (parsed.type === 'comicbook') {
           const comicInfo = await fetchComicbookInfo(parsed.uuid, token);
           const metadata = await fetchComicbookMetadata(parsed.uuid, token);
@@ -194,6 +222,9 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
             author: infoResult ? getAuthors(infoResult) : '',
             coverUrl: infoResult?.cover?.large ?? '',
             episodes,
+            episodesAvailable: Object.fromEntries(
+              episodes.map((episode) => [episode.uuid, stampedUuids.has(episode.uuid)]),
+            ),
           };
         } else {
           const [seriesInfo, parts] = await Promise.all([
@@ -201,7 +232,13 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
             fetchSeriesParts(parsed.uuid, token),
           ]);
           if (!parts.length) throw new Error('Series parts not found');
-          nextInfo.series = { info: seriesInfo, parts };
+          nextInfo.series = {
+            info: seriesInfo,
+            parts,
+            partsAvailable: Object.fromEntries(
+              parts.map((part) => [part.uuid, stampedUuids.has(part.uuid)]),
+            ),
+          };
         }
         setInfo(nextInfo);
         return;
@@ -513,7 +550,14 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
   };
 
   const seriesPartType = (part: YandexSeriesPart): 'book' | 'audiobook' | 'comicbook' => {
-    if (part.type === 'audiobook' || part.type === 'comicbook') return part.type;
+    // The REST parts list is inconsistent: books carry type 'Book', audiobook
+    // parts carry no type at all but have can_be_listened set (a book-only
+    // download on an audiobook uuid 404s).
+    const type = part.type?.toLowerCase();
+    if (type === 'comicbook' || type === 'comic') return 'comicbook';
+    if (type === 'audiobook' || type === 'audio' || (part.can_be_listened && !part.can_be_read)) {
+      return 'audiobook';
+    }
     return 'book';
   };
 
@@ -603,9 +647,10 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
     label: string,
     icon: React.ReactNode,
     onDownload: () => void,
+    downloaded = false,
   ) => {
     const job = extraJob(id);
-    if (job?.status === 'completed') {
+    if (downloaded || job?.status === 'completed') {
       return (
         <button type='button' className='btn btn-contrast btn-sm' disabled>
           <MdCheck className='h-4 w-4' />
@@ -1045,6 +1090,9 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
                       `${_('Book')} · ${info.serial.episodes.length}`,
                       <RiBook2Fill className='h-4 w-4' />,
                       () => void startSerialDownload(),
+                      info.serial.episodes.every(
+                        (episode) => info.serial?.episodesAvailable[episode.uuid],
+                      ),
                     )}
                   {info.series?.parts.map((part) => {
                     const type = seriesPartType(part);
@@ -1067,6 +1115,7 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
                           `${label} — ${part.title ?? ''}`,
                           icon,
                           () => void startSeriesPartDownload(part),
+                          info.series?.partsAvailable[part.uuid],
                         )}
                       </div>
                     );

@@ -362,6 +362,61 @@ describe('YandexImportDialog', () => {
     expect(spec.resourceType).toBe('book');
   });
 
+  it('detects audiobook series parts without a type field', async () => {
+    clientMocks.fetchSeriesInfo.mockResolvedValue({
+      title: 'Воспоминания о прошлом Земли',
+      cover: { large: 'https://covers/series.jpeg' },
+      authors: [{ name: 'Лю Цысинь' }],
+    });
+    clientMocks.fetchSeriesParts.mockResolvedValue([
+      { uuid: 'p1', title: 'Тёмный лес', can_be_listened: true },
+    ]);
+    clientMocks.fetchAudiobookInfo.mockResolvedValue({
+      title: 'Тёмный лес',
+      duration: 100,
+      cover: { large: 'https://covers/audiobook.jpeg' },
+      authors: [{ name: 'Лю Цысинь' }],
+    });
+    clientMocks.fetchTracks.mockResolvedValue([
+      { number: 0, offline: { max_bit_rate: { url: 'https://cdn/1.m3u8' } } },
+    ]);
+
+    render(<YandexImportDialog isOpen onClose={vi.fn()} />);
+    await search('https://books.yandex.ru/series/H31ocIEP');
+
+    const button = await screen.findByRole('button', { name: 'Audiobook — Тёмный лес' });
+    fireEvent.click(button);
+    await waitFor(() => expect(startDownloadMock).toHaveBeenCalledTimes(1));
+    const spec = startDownloadMock.mock.calls[0]![0];
+    expect(spec.id).toBe('p1::audiobook');
+    expect(spec.resourceType).toBe('audiobook');
+  });
+
+  it('shows an already-downloaded series part as downloaded', async () => {
+    clientMocks.fetchSeriesInfo.mockResolvedValue({
+      title: 'Серия',
+      cover: { large: 'https://covers/series.jpeg' },
+      authors: [{ name: 'Автор' }],
+    });
+    clientMocks.fetchSeriesParts.mockResolvedValue([
+      { uuid: 'p1', title: 'Книга 1', type: 'Book' },
+    ]);
+    const book = {
+      ...bookRow('h1'),
+      metadata: { title: 'Книга 1', author: '', language: 'und', yandex: { uuid: 'p1' } },
+    };
+    useLibraryStore.getState().setLibrary([book as Book]);
+    appServiceMocks.isBookAvailable.mockResolvedValue(true);
+
+    render(<YandexImportDialog isOpen onClose={vi.fn()} />);
+    await search('https://books.yandex.ru/series/Sr12345');
+
+    const button = await screen.findByRole('button', { name: 'Book — Книга 1' });
+    expect(button.getAttribute('disabled')).toBeDefined();
+    fireEvent.click(button);
+    expect(startDownloadMock).not.toHaveBeenCalled();
+  });
+
   it('downloads fully to the server: submits one combined job', async () => {
     clientMocks.fetchBookInfo.mockResolvedValue({
       title: 'Последнее желание',
