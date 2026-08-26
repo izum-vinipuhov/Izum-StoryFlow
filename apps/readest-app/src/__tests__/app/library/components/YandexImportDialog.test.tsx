@@ -491,9 +491,30 @@ describe('YandexImportDialog', () => {
     expect(screen.queryByRole('button', { name: 'Download Fully' })).toBeNull();
   });
 
-  it('shows a server-downloaded book as downloaded via the synced metadata stamp', async () => {
-    // No local files, no import index entry — only the synced library row
-    // carries the Yandex stamp (what the server wrote on download).
+  it('shows a server-downloaded book as downloaded when its files are on the device', async () => {
+    // No import index entry — only the synced library row carries the Yandex
+    // stamp (what the server wrote on download), and the files are synced in.
+    const book = {
+      ...bookRow('h1'),
+      metadata: { title: 'Книга', author: '', language: 'und', yandex: { uuid: 'Abc123' } },
+    };
+    useLibraryStore.getState().setLibrary([book as Book]);
+    appServiceMocks.isBookAvailable.mockResolvedValue(true);
+    clientMocks.fetchBookInfo.mockResolvedValue(bookInfo);
+    clientMocks.fetchAudiobookInfo.mockRejectedValue(new Error('Audiobook not found'));
+
+    render(<YandexImportDialog isOpen onClose={vi.fn()} />);
+    await search('https://books.yandex.ru/books/Abc123');
+
+    // With nothing left to download the part buttons disappear entirely.
+    expect(await screen.findByText('Книга')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Book' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Download Fully' })).toBeNull();
+  });
+
+  it('offers a re-download when the stamped book was deleted locally', async () => {
+    // The library row (and its Yandex stamp) survives, but the files are gone
+    // — the dialog must check real availability, not just the metadata stamp.
     const book = {
       ...bookRow('h1'),
       metadata: { title: 'Книга', author: '', language: 'und', yandex: { uuid: 'Abc123' } },
@@ -506,10 +527,8 @@ describe('YandexImportDialog', () => {
     render(<YandexImportDialog isOpen onClose={vi.fn()} />);
     await search('https://books.yandex.ru/books/Abc123');
 
-    // With nothing left to download the part buttons disappear entirely.
     expect(await screen.findByText('Книга')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Book' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Download Fully' })).toBeNull();
+    expect(await screen.findByRole('button', { name: 'Book' })).toBeTruthy();
   });
 
   it('shows live progress with pause and cancel for a running job on search', async () => {

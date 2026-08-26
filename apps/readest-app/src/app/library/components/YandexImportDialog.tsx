@@ -216,10 +216,21 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
         const yandexBooks = useLibraryStore
           .getState()
           .library.filter((b) => !b.deletedAt && b.metadata?.yandex);
+        // Only books whose files actually exist count as downloaded: after a
+        // local delete the library row (or the synced metadata) can outlive
+        // the files, and the dialog would otherwise report "Downloaded"
+        // forever.
+        const availableYandexBooks = (
+          await Promise.all(
+            yandexBooks.map(async (b) => ((await appService.isBookAvailable(b)) ? b : null)),
+          )
+        ).filter((b): b is NonNullable<typeof b> => b !== null);
         const states: Partial<Record<YandexPartKey, YandexPartAvailability>> = {};
         if (nextInfo.book) {
           const local = await computeEbookPartState(appService, index, nextInfo.book.uuid);
-          const synced = yandexBooks.some((b) => b.metadata?.yandex?.uuid === nextInfo.book!.uuid);
+          const synced = availableYandexBooks.some(
+            (b) => b.metadata?.yandex?.uuid === nextInfo.book!.uuid,
+          );
           states.book = local === 'downloaded' || synced ? 'downloaded' : 'not-downloaded';
         }
         if (nextInfo.audiobook) {
@@ -230,7 +241,7 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
           const local = await computeAudiobookPartState(appService, index, reduced);
           // Attached: the ebook row carries the audiobookHash stamp.
           // Standalone: the audiobook's own row carries the uuid stamp.
-          const synced = yandexBooks.some(
+          const synced = availableYandexBooks.some(
             (b) =>
               b.metadata?.yandex?.audiobookHash === manifestHash ||
               (b.hash === manifestHash && b.metadata?.yandex?.uuid === nextInfo.uuid),
