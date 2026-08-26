@@ -70,8 +70,10 @@ export const getYandexHeaders = (token: string): Record<string, string> => ({
   'auth-token': token,
 });
 
+import { getCachedYandexToken } from './yandexTokenVault';
+
 export const getYandexAccessToken = (settings: SystemSettings | undefined): string =>
-  settings?.yandexBooks?.accessToken ?? '';
+  getCachedYandexToken() ?? settings?.yandexBooks?.accessToken ?? '';
 
 /**
  * Web builds go through the /api/yandex/proxy route (CORS); the token rides a

@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import YandexTokenDialog, {
   setYandexTokenDialogVisible,
 } from '@/app/library/components/YandexTokenDialog';
+import { resetYandexTokenCache } from '@/services/yandex/yandexTokenVault';
 
 vi.mock('@/hooks/useTranslation', () => ({
   useTranslation: () => (key: string) => key,
@@ -51,6 +52,7 @@ beforeEach(() => {
   vi.stubGlobal('localStorage', makeLocalStorageStub());
   useEnvMock.mockReturnValue({ envConfig });
   useSettingsStoreMock.mockReturnValue({ settings: { yandexBooks: { accessToken: '' } } });
+  resetYandexTokenCache();
 });
 
 afterEach(() => {
@@ -92,9 +94,11 @@ describe('YandexTokenDialog', () => {
     fireEvent.change(input, { target: { value: 'y0_fresh' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
-    expect(saveSysSettingsMock).toHaveBeenCalledWith(envConfig, 'yandexBooks', {
-      accessToken: 'y0_fresh',
-    });
+    await waitFor(() =>
+      expect(saveSysSettingsMock).toHaveBeenCalledWith(envConfig, 'yandexBooks', {
+        accessToken: 'y0_fresh',
+      }),
+    );
     await waitFor(() => expect(dispatchMock).toHaveBeenCalled());
   });
 
@@ -107,6 +111,10 @@ describe('YandexTokenDialog', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: 'Clear' }));
 
-    expect(saveSysSettingsMock).toHaveBeenCalledWith(envConfig, 'yandexBooks', { accessToken: '' });
+    await waitFor(() =>
+      expect(saveSysSettingsMock).toHaveBeenCalledWith(envConfig, 'yandexBooks', {
+        accessToken: '',
+      }),
+    );
   });
 });

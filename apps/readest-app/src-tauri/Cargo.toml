@@ -172,3 +172,9 @@ winreg = "0.52"
 
 [target.'cfg(target_os = "android")'.dependencies]
 libc = "0.2"
+
+[target.'cfg(not(target_os = "android"))'.dependencies]
+# OS-keychain storage for the Yandex Books token (macOS Keychain, iOS Keychain,
+# Windows Credential Manager, Linux Secret Service). Android has no backend —
+# the client keeps its legacy storage there (see yandex_token.rs).
+keyring = "3"

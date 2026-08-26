@@ -41,6 +41,8 @@ mod spawn_fresh_browser;
 mod transfer_file;
 #[cfg(desktop)]
 mod window_state;
+#[cfg(not(target_os = "android"))]
+mod yandex_token;
 #[cfg(target_os = "windows")]
 use tauri::webview::ScrollBarStyle;
 use tauri::{command, Emitter, WebviewUrl, WebviewWindowBuilder, Window};
@@ -420,6 +422,12 @@ pub fn run() {
             epub_parser::parse_epub_full,
             mobi_parser::parse_mobi_metadata,
             mobi_parser::extract_mobi_cover_full,
+            #[cfg(not(target_os = "android"))]
+            yandex_token::yandex_token_get,
+            #[cfg(not(target_os = "android"))]
+            yandex_token::yandex_token_set,
+            #[cfg(not(target_os = "android"))]
+            yandex_token::yandex_token_clear,
             #[cfg(target_os = "macos")]
             macos::safari_auth::auth_with_safari,
             #[cfg(target_os = "macos")]

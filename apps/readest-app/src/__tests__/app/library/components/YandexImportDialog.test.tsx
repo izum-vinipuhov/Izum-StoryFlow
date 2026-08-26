@@ -73,6 +73,7 @@ import { useLibraryStore } from '@/store/libraryStore';
 import { useYandexDownloadsStore } from '@/store/yandexDownloadsStore';
 import { yandexDownloadsManager } from '@/services/yandex/yandexDownloadsManager';
 import { getAudiobookManifestHash } from '@/utils/audiobook';
+import { resetYandexTokenCache } from '@/services/yandex/yandexTokenVault';
 import type { Book } from '@/types/book';
 
 const withToken = () =>
@@ -109,6 +110,7 @@ const tracks = [
 ];
 
 beforeEach(() => {
+  resetYandexTokenCache();
   useEnvMock.mockReturnValue({ envConfig: {}, appService: appServiceMocks });
   canDownloadToServerMock.mockReset();
   canDownloadToServerMock.mockReturnValue(true);

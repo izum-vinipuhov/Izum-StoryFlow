@@ -73,7 +73,8 @@ export const cancelServerJob = async (id: string): Promise<void> => {
 export const resumeServerJob = async (id: string): Promise<void> => {
   // Resume needs the token: the server re-resolves the (expiring) chapter
   // CDN urls before restarting. Never persisted server-side.
-  const token = useSettingsStore.getState().settings.yandexBooks?.accessToken ?? '';
+  const { hydrateYandexToken } = await import('@/services/yandex/yandexTokenVault');
+  const { token } = await hydrateYandexToken(useSettingsStore.getState().settings);
   await postServerJobAction(id, 'resume', token);
 };
 

@@ -27,6 +27,8 @@ import {
   resumeServerJob,
 } from '@/hooks/useYandexServerJobs';
 import { formatBytes } from '@/utils/book';
+import { saveSysSettings } from '@/helpers/settings';
+import { hydrateYandexToken } from '@/services/yandex/yandexTokenVault';
 import { useYandexDownloads, type YandexDownloadTarget } from '@/hooks/useYandexDownloads';
 import { setYandexTokenDialogVisible } from './YandexTokenDialog';
 import {
@@ -137,7 +139,7 @@ const getAuthors = (info: { authors?: Array<{ name: string } | string> | string 
  */
 const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose }) => {
   const _ = useTranslation();
-  const { appService } = useEnv();
+  const { appService, envConfig } = useEnv();
   const { startDownload, canDownloadToServer } = useYandexDownloads();
   const { settings } = useSettingsStore();
   const jobs = useYandexDownloadsStore((state) => state.jobs);
@@ -182,7 +184,11 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
       setError(_('Unsupported link type'));
       return;
     }
-    const token = getYandexAccessToken(settings);
+    const { token, migrated } = await hydrateYandexToken(settings);
+    if (migrated) {
+      // The legacy plaintext left settings.json — persist the cleaned field.
+      void saveSysSettings(envConfig, 'yandexBooks', { accessToken: '' });
+    }
     if (!token) {
       setError(_('Set your Yandex Books token first'));
       setYandexTokenDialogVisible(true);

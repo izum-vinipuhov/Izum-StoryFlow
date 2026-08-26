@@ -5,6 +5,12 @@ import { useEnv } from '@/context/EnvContext';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useSettingsStore } from '@/store/settingsStore';
 import { saveSysSettings } from '@/helpers/settings';
+import { isTauriAppPlatform } from '@/services/environment';
+import {
+  clearYandexToken,
+  hydrateYandexToken,
+  saveYandexToken,
+} from '@/services/yandex/yandexTokenVault';
 import { eventDispatcher } from '@/utils/event';
 import Dialog from '@/components/Dialog';
 
@@ -42,9 +48,15 @@ const YandexTokenDialog: React.FC = () => {
     const handleCustomEvent = (event: CustomEvent) => {
       setIsOpen(event.detail.visible);
       if (event.detail.visible) {
-        setToken(settings.yandexBooks?.accessToken ?? '');
-        setDraft('');
-        setEditing(false);
+        void (async () => {
+          const { token, migrated } = await hydrateYandexToken(settings);
+          setToken(token);
+          setDraft('');
+          setEditing(false);
+          if (migrated) {
+            void saveSysSettings(envConfig, 'yandexBooks', { accessToken: '' });
+          }
+        })();
       }
     };
 
@@ -69,7 +81,11 @@ const YandexTokenDialog: React.FC = () => {
   const effectiveToken = editing ? draft.trim() : token.trim();
 
   const handleSave = async () => {
-    await saveSysSettings(envConfig, 'yandexBooks', { accessToken: effectiveToken });
+    await saveYandexToken(effectiveToken);
+    // The keychain is the storage on Tauri; the settings field stays empty.
+    await saveSysSettings(envConfig, 'yandexBooks', {
+      accessToken: isTauriAppPlatform() ? '' : effectiveToken,
+    });
     eventDispatcher.dispatch('toast', {
       message: _('Yandex token saved'),
       type: 'success',
@@ -78,6 +94,7 @@ const YandexTokenDialog: React.FC = () => {
   };
 
   const handleClear = async () => {
+    await clearYandexToken();
     await saveSysSettings(envConfig, 'yandexBooks', { accessToken: '' });
     eventDispatcher.dispatch('toast', {
       message: _('Yandex token cleared'),
