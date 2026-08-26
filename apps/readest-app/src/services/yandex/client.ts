@@ -245,3 +245,144 @@ export const streamYandexFile = async (
   }
   return { totalBytes, chunks };
 };
+
+/**
+ * Search the Yandex Books catalogue through the GraphQL gateway. The
+ * operation document is byte-identical to the one registered in the
+ * gateway's whitelist — any modified query is rejected with "Whitelist:
+ * query not found". Query taken from stepan163s/yandex-book-api (MIT).
+ */
+const YANDEX_GRAPHQL_API = 'https://api-gateway.bookmate.yandex.net/graphql';
+
+const YANDEX_SEARCH_QUERY = `
+
+query Search($query: SearchParamsInput!) {
+    search(query: $query) {
+        page {
+            __typename
+            ...searchSnippetAudioBookFragment
+            ...searchSnippetTextBookFragment
+            ...searchSnippetComicBookFragment
+            ...searchSnippetTextSerialFragment
+            ...bookshelfFragment
+            ...personFragment
+            ...publisherFragment
+            ...seriesFragment
+            ...topicFragment
+            ...userFragment
+        }
+        cursor
+        rankedFilter { filterType }
+        misspell { correctedText correctionType }
+    }
+}
+fragment coverFragment on Cover { url ratio backgroundColorHex }
+fragment personFragment on Person { avatar { __typename ...coverFragment } name uuid worksCount roles }
+fragment bookFragment on Book { annotation name cover { __typename ...coverFragment } uuid authors { __typename ...personFragment } ageRestriction editorAnnotation }
+fragment publisherFragment on Publisher { avatar { __typename ...coverFragment } name uuid worksCount }
+fragment publisherBookFragment on Book { publisher { __typename ...publisherFragment } }
+fragment translatorsBookFragment on Book { translators { __typename ...personFragment } }
+fragment topicsBookFragment on Book { topics { name totalBook uuid } }
+fragment subscriptionLevelsFragment on Book { subscriptionLevels }
+fragment snippetBookFragment on Book { __typename ...bookFragment ...publisherBookFragment ...translatorsBookFragment ...topicsBookFragment ...subscriptionLevelsFragment }
+fragment bookTagFragment on Tag { name value }
+fragment narratorsAudioBookFragment on AudioBook { narrators { __typename ...personFragment } }
+fragment progressFragment on Progress { finished inLibrary progress isPublic }
+fragment progressAudioBookFragment on AudioBook { progress { __typename ...progressFragment } }
+fragment listenersCountAudioBookFragment on AudioBook { listenersCount }
+fragment searchSnippetAudioBookFragment on AudioBook { __typename book { __typename ...snippetBookFragment tags { __typename ...bookTagFragment } } ...narratorsAudioBookFragment ...progressAudioBookFragment ...listenersCountAudioBookFragment }
+fragment progressTextBookFragment on TextBook { progress { __typename ...progressFragment } }
+fragment readersCountTextBookFragment on TextBook { readersCount }
+fragment searchSnippetTextBookFragment on TextBook { __typename book { __typename ...snippetBookFragment tags { __typename ...bookTagFragment } } ...progressTextBookFragment ...readersCountTextBookFragment }
+fragment progressComicBookFragment on ComicBook { progress { __typename ...progressFragment } }
+fragment readersCountComicBookFragment on ComicBook { readersCount }
+fragment searchSnippetComicBookFragment on ComicBook { __typename book { __typename ...snippetBookFragment tags { __typename ...bookTagFragment } } ...progressComicBookFragment ...readersCountComicBookFragment }
+fragment textSerialFragment on TextSerial { book { __typename ...bookFragment } }
+fragment episodesTextSerialFragment on TextSerial { episodes { total } }
+fragment readersCountTextSerialFragment on TextSerial { readersCount }
+fragment searchSnippetTextSerialFragment on TextSerial { __typename book { __typename ...snippetBookFragment tags { __typename ...bookTagFragment } } ...textSerialFragment ...episodesTextSerialFragment ...readersCountTextSerialFragment }
+fragment userFragment on User { avatar { __typename ...coverFragment } name uuid followersCount login }
+fragment bookshelfFragment on Bookshelf { cover { __typename ...coverFragment } name uuid user { __typename ...userFragment } posts { total } followersCount description }
+fragment seriesFragment on Series { authors { __typename ...personFragment } cover { __typename ...coverFragment } name uuid items { followersCount total } }
+fragment topicFragment on Topic { name slug totalBook uuid parent { name slug totalBook uuid } }
+
+`;
+
+export interface YandexSearchHit {
+  type: 'book' | 'serial' | 'audiobook' | 'comicbook';
+  uuid: string;
+  name: string;
+}
+
+const SEARCH_TYPENAME_TO_TYPE: Record<string, YandexSearchHit['type']> = {
+  TextBook: 'book',
+  TextSerial: 'serial',
+  AudioBook: 'audiobook',
+  ComicBook: 'comicbook',
+};
+
+const mapYandexSearchHits = (data: unknown): YandexSearchHit[] => {
+  const page = (data as { data?: { search?: { page?: unknown } } } | null)?.data?.search?.page;
+  if (!Array.isArray(page)) return [];
+  return page.flatMap((item) => {
+    const typename = (item as { __typename?: string } | null)?.__typename;
+    const book = (item as { book?: { uuid?: string; name?: string } } | null)?.book;
+    const type = typename ? SEARCH_TYPENAME_TO_TYPE[typename] : undefined;
+    if (!type || !book?.uuid) return [];
+    return [{ type, uuid: book.uuid, name: book.name ?? '' }];
+  });
+};
+
+/**
+ * Search the catalogue by title. On Tauri the request goes directly to the
+ * gateway (no CORS); web builds go through the /api/yandex/search route,
+ * which keeps the token out of client-visible logs the same way the REST
+ * proxy does.
+ */
+export const searchYandexBooks = async (
+  query: string,
+  token: string,
+): Promise<YandexSearchHit[]> => {
+  const payload = JSON.stringify({
+    operationName: 'Search',
+    variables: { query: { cursor: '', noMisspell: false, query, types: [] } },
+    query: YANDEX_SEARCH_QUERY,
+  });
+  if (isTauriAppPlatform()) {
+    const response = await tauriFetch(YANDEX_GRAPHQL_API, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Auth-Token': token,
+        Accept: 'multipart/mixed; deferSpec=20220824, application/json',
+      },
+      body: payload,
+      danger: { acceptInvalidCerts: true, acceptInvalidHostnames: true },
+    });
+    if (response.status === 401 || response.status === 403) {
+      throw new Error(YANDEX_TOKEN_ERROR);
+    }
+    if (!response.ok) {
+      throw new Error(`Yandex search failed (${response.status})`);
+    }
+    return mapYandexSearchHits(await response.json());
+  }
+  const response = await fetch(`${getAPIBaseUrl()}/yandex/search`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query, token }),
+  });
+  if (response.status === 401 || response.status === 403) {
+    throw new Error(YANDEX_TOKEN_ERROR);
+  }
+  if (!response.ok) {
+    const data = (await response.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(data?.error ?? `Yandex search failed (${response.status})`);
+  }
+  const data = (await response.json()) as { results?: YandexSearchHit[] };
+  return data.results ?? [];
+};
+
+/** Normalizes a title for exact-match comparison: case, ё/е, whitespace. */
+export const normalizeYandexTitle = (title: string): string =>
+  title.toLowerCase().replace(/ё/g, 'е').replace(/\s+/g, ' ').trim();

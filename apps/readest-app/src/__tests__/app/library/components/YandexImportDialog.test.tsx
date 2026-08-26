@@ -34,6 +34,7 @@ const clientMocks = vi.hoisted(() => ({
   fetchAudiobookInfo: vi.fn(),
   fetchTracks: vi.fn(),
   probeFileSize: vi.fn(),
+  searchYandexBooks: vi.fn(),
 }));
 
 const appServiceMocks = vi.hoisted(() => ({
@@ -52,6 +53,7 @@ vi.mock('@/services/yandex/client', async (importOriginal) => {
     fetchAudiobookInfo: clientMocks.fetchAudiobookInfo,
     fetchTracks: clientMocks.fetchTracks,
     probeFileSize: clientMocks.probeFileSize,
+    searchYandexBooks: clientMocks.searchYandexBooks,
   };
 });
 
@@ -104,6 +106,8 @@ beforeEach(() => {
   clientMocks.fetchAudiobookInfo.mockReset();
   clientMocks.fetchTracks.mockReset();
   clientMocks.probeFileSize.mockReset();
+  clientMocks.searchYandexBooks.mockReset();
+  clientMocks.searchYandexBooks.mockResolvedValue([]);
   clientMocks.probeFileSize.mockResolvedValue(null);
   appServiceMocks.readFile.mockReset();
   appServiceMocks.readFile.mockImplementation(async () => {
@@ -225,6 +229,57 @@ describe('YandexImportDialog', () => {
     const spec = startDownloadMock.mock.calls[0]![0];
     expect(spec.id).toBe('LZRQId0e');
     expect(spec.files[0]!.url).toContain('/books/LZRQId0e/content/v4');
+  });
+
+  it('finds the ebook via catalogue search when the audiobook has no linked uuid', async () => {
+    // The REST API returns linked_book_uuids: [] for many titles (e.g. «Тёмный
+    // лес»); the dialog falls back to the GraphQL catalogue search and takes
+    // only an exact normalized-title match.
+    clientMocks.fetchBookInfo.mockRejectedValueOnce(new Error('Book not found'));
+    clientMocks.fetchAudiobookInfo.mockResolvedValue({
+      title: 'Тёмный лес',
+      duration: 100,
+      cover: { large: 'https://covers/audiobook.jpeg' },
+      authors: [{ name: 'Лю Цысинь' }],
+    });
+    clientMocks.fetchTracks.mockResolvedValue([
+      { number: 0, offline: { max_bit_rate: { url: 'https://cdn/1.m3u8' } } },
+    ]);
+    clientMocks.searchYandexBooks.mockResolvedValue([
+      { type: 'book', uuid: 'oujEHVbD', name: 'Темный лес' },
+    ]);
+    clientMocks.fetchBookInfo.mockResolvedValueOnce({
+      title: 'Темный лес',
+      cover: { large: 'https://covers/book.jpeg' },
+      authors: [{ name: 'Лю Цысинь' }],
+    });
+
+    render(<YandexImportDialog isOpen onClose={vi.fn()} />);
+    await search('https://books.yandex.ru/audiobooks/WQbQxl4z');
+
+    expect(await screen.findByRole('button', { name: 'Book' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Audiobook' })).toBeTruthy();
+    expect(clientMocks.searchYandexBooks).toHaveBeenCalledWith('Тёмный лес', 'y0_tok');
+  });
+
+  it('ignores catalogue search results whose normalized name differs', async () => {
+    clientMocks.fetchBookInfo.mockRejectedValue(new Error('Book not found'));
+    clientMocks.fetchAudiobookInfo.mockResolvedValue({
+      title: 'Тёмный лес',
+      duration: 100,
+      cover: { large: 'https://covers/audiobook.jpeg' },
+      authors: [{ name: 'Лю Цысинь' }],
+    });
+    clientMocks.fetchTracks.mockResolvedValue([]);
+    clientMocks.searchYandexBooks.mockResolvedValue([
+      { type: 'book', uuid: 'zzz', name: 'Тёмный лес. Книга 3. Вожак' },
+    ]);
+
+    render(<YandexImportDialog isOpen onClose={vi.fn()} />);
+    await search('https://books.yandex.ru/audiobooks/WQbQxl4z');
+
+    expect(await screen.findByRole('button', { name: 'Audiobook' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Book' })).toBeNull();
   });
 
   it('downloads fully to the server: submits one combined job', async () => {

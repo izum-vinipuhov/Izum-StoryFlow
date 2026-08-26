@@ -37,8 +37,10 @@ import {
   getTrackDurationSec,
   getYandexAccessToken,
   isSupportedYandexType,
+  normalizeYandexTitle,
   parseYandexUrl,
   probeFileSize,
+  searchYandexBooks,
 } from '@/services/yandex/client';
 import {
   yandexDownloadsManager,
@@ -201,6 +203,32 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
             };
           } catch {
             // No ebook variant available — leave the book button hidden.
+          }
+        }
+        // The REST API leaves linked_book_uuids empty for many titles (the
+        // web's "Читать" button gets its link from the GraphQL relations).
+        // Fall back to a catalogue search by title: only an exact match on
+        // the normalized name (case, ё/е, whitespace) is accepted.
+        if (!nextInfo.book) {
+          try {
+            const title = normalizeYandexTitle(audiobookResult.value.title);
+            const hits = await searchYandexBooks(audiobookResult.value.title, token);
+            const hit = hits.find(
+              (h) => h.type === 'book' && normalizeYandexTitle(h.name) === title,
+            );
+            if (hit) {
+              const linkedInfo = await fetchBookInfo(hit.uuid, token);
+              nextInfo.book = {
+                uuid: hit.uuid,
+                info: linkedInfo,
+                bytes: await probeFileSize(
+                  `${YANDEX_API_BASE}/books/${hit.uuid}/content/v4`,
+                  token,
+                ),
+              };
+            }
+          } catch {
+            // Search fallback failed — keep the audiobook-only offer.
           }
         }
       }
