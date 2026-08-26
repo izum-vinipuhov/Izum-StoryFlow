@@ -198,6 +198,58 @@ describe('POST /api/yandex/jobs', () => {
     expect(mini.all('books')).toHaveLength(1);
   });
 
+  it('runs a comicbook job end-to-end and publishes a CBZ book', async () => {
+    fetchSpy.mockImplementation(() => Promise.resolve(chunked(EPUB_BYTES)));
+    const res = await POST(
+      postReq({
+        id: 'comic1',
+        resourceType: 'comicbook',
+        title: 'Смешарики',
+        author: '',
+        coverUrl: 'https://covers.example/comic.jpeg',
+        files: [
+          {
+            name: 'comic1.cbz',
+            url: 'https://comicbook.bookmate.ru/v1/content/comicbook/abc',
+            sizeBytes: 100,
+          },
+        ],
+        token: 'y0_tok',
+      }),
+    );
+    expect(res.status).toBe(200);
+
+    await vi.waitFor(() => {
+      expect(mini.all('yandex_jobs')[0]!['status'] as string).toBe('completed');
+    });
+    const book = mini.all('books')[0];
+    expect(book).toBeTruthy();
+    expect(book!['format'] as string).toBe('CBZ');
+    expect(book!['title'] as string).toBe('Смешарики');
+    const files = mini.all('files');
+    expect(files.some((f) => (f['file_key'] as string).endsWith('.cbz'))).toBe(true);
+  });
+
+  it('rejects a comicbook job with more than one file', async () => {
+    const res = await POST(
+      postReq({
+        id: 'comic1',
+        resourceType: 'comicbook',
+        title: 'Смешарики',
+        author: '',
+        coverUrl: '',
+        files: [
+          { name: 'a.cbz', url: 'https://comicbook.bookmate.ru/v1/a', sizeBytes: 1 },
+          { name: 'b.cbz', url: 'https://comicbook.bookmate.ru/v1/b', sizeBytes: 1 },
+        ],
+        token: 'y0_tok',
+      }),
+    );
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toContain('exactly one file');
+  });
+
   it('rejects a duplicate active job with 409', async () => {
     mini.seed('yandex_jobs', [
       {
