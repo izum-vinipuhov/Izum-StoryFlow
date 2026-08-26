@@ -102,6 +102,8 @@ interface SearchInfo {
     parts: YandexSeriesPart[];
     /** part uuid → already present on this device. */
     partsAvailable: Record<string, boolean>;
+    /** resolved ebook-variant uuid → already present on this device. */
+    booksAvailable: Record<string, boolean>;
   };
 }
 
@@ -232,11 +234,35 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
             fetchSeriesParts(parsed.uuid, token),
           ]);
           if (!parts.length) throw new Error('Series parts not found');
+          // Audiobook parts usually carry the text version only via the
+          // catalogue (linked_book_uuids is empty in the REST payload) — the
+          // same fallback the single-link search uses: exact title match.
+          const resolvedParts = await Promise.all(
+            parts.map(async (part) => {
+              if (seriesPartType(part) !== 'audiobook') return part;
+              const abInfo = await fetchAudiobookInfo(part.uuid, token).catch(() => null);
+              if (!abInfo) return part;
+              const linked = abInfo.linked_book_uuids?.[0];
+              if (linked) return { ...part, bookUuid: linked };
+              const title = normalizeYandexTitle(abInfo.title ?? '');
+              if (!title) return part;
+              const hits = await searchYandexBooks(abInfo.title, token).catch(() => []);
+              const hit = hits.find(
+                (h) => h.type === 'book' && normalizeYandexTitle(h.name) === title,
+              );
+              return hit ? { ...part, bookUuid: hit.uuid } : part;
+            }),
+          );
           nextInfo.series = {
             info: seriesInfo,
-            parts,
+            parts: resolvedParts,
             partsAvailable: Object.fromEntries(
-              parts.map((part) => [part.uuid, stampedUuids.has(part.uuid)]),
+              resolvedParts.map((part) => [part.uuid, stampedUuids.has(part.uuid)]),
+            ),
+            booksAvailable: Object.fromEntries(
+              resolvedParts
+                .filter((part) => part.bookUuid)
+                .map((part) => [part.bookUuid!, stampedUuids.has(part.bookUuid!)]),
             ),
           };
         }
@@ -640,6 +666,35 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
   const startSeriesPartsDownload = async (parts: YandexSeriesPart[]) => {
     for (const part of parts) {
       await startSeriesPartDownload(part);
+    }
+  };
+
+  /** Download the resolved ebook variant of an audiobook series part. */
+  const startSeriesBookVariantDownload = async (part: YandexSeriesPart) => {
+    if (!info?.series || !part.bookUuid) return;
+    const token = getYandexAccessToken(settings);
+    try {
+      const bookInfo = await fetchBookInfo(part.bookUuid, token);
+      await startDownload(
+        {
+          id: part.bookUuid,
+          resourceType: 'book',
+          title: bookInfo.title,
+          author: getAuthors(bookInfo),
+          coverUrl: bookInfo.cover?.large ?? part.cover?.large ?? '',
+          files: [
+            {
+              name: `${part.bookUuid}.epub`,
+              url: `${YANDEX_API_BASE}/books/${part.bookUuid}/content/v4`,
+              path: `${part.bookUuid}.epub`,
+              base: 'Cache',
+            },
+          ],
+        },
+        { target: downloadTarget },
+      );
+    } catch (e) {
+      setError(e instanceof Error ? _(e.message) : _('Could not fetch this book'));
     }
   };
 
@@ -1136,13 +1191,34 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
                               {seriesTypeLabel(type)}
                             </p>
                           </div>
-                          {extraPartCell(
-                            part.uuid,
-                            seriesTypeLabel(type),
-                            seriesTypeIcon(type),
-                            () => void startSeriesPartDownload(part),
-                            info.series!.partsAvailable[part.uuid],
-                          )}
+                          <div className='flex shrink-0 items-center gap-1'>
+                            {type === 'audiobook' && part.bookUuid && (
+                              <div className='flex flex-col items-stretch gap-1'>
+                                {extraPartCell(
+                                  part.bookUuid,
+                                  _('Book'),
+                                  <RiBook2Fill className='h-4 w-4' />,
+                                  () => void startSeriesBookVariantDownload(part),
+                                  info.series!.booksAvailable[part.bookUuid],
+                                )}
+                                {extraPartCell(
+                                  part.uuid,
+                                  seriesTypeLabel(type),
+                                  seriesTypeIcon(type),
+                                  () => void startSeriesPartDownload(part),
+                                  info.series!.partsAvailable[part.uuid],
+                                )}
+                              </div>
+                            )}
+                            {!(type === 'audiobook' && part.bookUuid) &&
+                              extraPartCell(
+                                part.uuid,
+                                seriesTypeLabel(type),
+                                seriesTypeIcon(type),
+                                () => void startSeriesPartDownload(part),
+                                info.series!.partsAvailable[part.uuid],
+                              )}
+                          </div>
                         </div>
                       );
                     })}
@@ -1151,6 +1227,10 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
                     const bookParts = info.series.parts.filter(
                       (part) => seriesPartType(part) === 'book',
                     );
+                    const bookVariants = info.series.parts.filter(
+                      (part) => seriesPartType(part) === 'audiobook' && part.bookUuid,
+                    );
+                    const bookCount = bookParts.length + bookVariants.length;
                     const audioParts = info.series.parts.filter(
                       (part) => seriesPartType(part) === 'audiobook',
                     );
@@ -1159,16 +1239,26 @@ const YandexImportDialog: React.FC<YandexImportDialogProps> = ({ isOpen, onClose
                     const allAvailable = available(info.series.parts);
                     return (
                       <>
-                        {bookParts.length > 0 && (
+                        {bookCount > 0 && (
                           <button
                             type='button'
                             className='btn btn-contrast btn-sm'
-                            disabled={available(bookParts)}
-                            onClick={() => void startSeriesPartsDownload(bookParts)}
+                            disabled={
+                              available(bookParts) &&
+                              bookVariants.every(
+                                (part) => info.series!.booksAvailable[part.bookUuid!],
+                              )
+                            }
+                            onClick={() => {
+                              void startSeriesPartsDownload(bookParts);
+                              for (const part of bookVariants) {
+                                void startSeriesBookVariantDownload(part);
+                              }
+                            }}
                           >
                             <MdDownload className='h-4 w-4' />
                             <RiBook2Fill className='h-4 w-4' />
-                            {`${_('Book')} · ${bookParts.length}`}
+                            {`${_('Book')} · ${bookCount}`}
                           </button>
                         )}
                         {audioParts.length > 0 && (

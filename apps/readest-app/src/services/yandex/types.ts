@@ -73,4 +73,7 @@ export interface YandexSeriesPart {
   can_be_read?: boolean;
   /** Position within the series (from the REST parts wrapper). */
   position?: number;
+  /** Resolved ebook variant of an audiobook part (linked uuid or a catalogue
+   * search match by title) — set by the dialog at search time. */
+  bookUuid?: string;
 }

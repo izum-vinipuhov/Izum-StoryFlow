@@ -114,6 +114,9 @@ beforeEach(() => {
   withToken();
   clientMocks.fetchBookInfo.mockReset();
   clientMocks.fetchAudiobookInfo.mockReset();
+  // Series search resolves ebook variants through this call; a permissive
+  // default keeps tests that don't exercise it from tripping the .catch.
+  clientMocks.fetchAudiobookInfo.mockResolvedValue({ title: '', linked_book_uuids: [] });
   clientMocks.fetchTracks.mockReset();
   clientMocks.probeFileSize.mockReset();
   clientMocks.searchYandexBooks.mockReset();
