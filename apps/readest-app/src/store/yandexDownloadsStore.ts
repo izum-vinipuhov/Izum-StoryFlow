@@ -57,7 +57,10 @@ const withAggregates = (job: YandexDownloadJob): YandexDownloadJob => ({
 
 export const useYandexDownloadsStore = create<YandexDownloadsState>((set) => ({
   jobs: [],
-  addJob: (job) => set((state) => ({ jobs: [...state.jobs, job] })),
+  // Replace by id: re-downloading a resource reuses its id, and a stale
+  // 'completed' row from an earlier download must not shadow the fresh
+  // 'downloading' one (find() picks the first match).
+  addJob: (job) => set((state) => ({ jobs: [...state.jobs.filter((j) => j.id !== job.id), job] })),
   updateJob: (id, patch) =>
     set((state) => ({
       jobs: state.jobs.map((job) => (job.id === id ? { ...job, ...patch } : job)),

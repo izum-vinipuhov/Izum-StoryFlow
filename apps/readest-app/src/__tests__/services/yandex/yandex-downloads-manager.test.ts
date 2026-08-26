@@ -389,3 +389,27 @@ describe('yandexDownloadsManager', () => {
     expect(appService.deleteFile).toHaveBeenCalledWith('/cache/Abc123.epub', 'None');
   });
 });
+
+describe('useYandexDownloadsStore.addJob', () => {
+  it('replaces an existing row with the same id instead of appending a duplicate', () => {
+    const store = useYandexDownloadsStore.getState();
+    store.clearAll();
+    const base = {
+      id: 'p1',
+      resourceType: 'book' as const,
+      title: 't',
+      author: '',
+      coverUrl: '',
+      status: 'completed' as const,
+      totalBytes: 0,
+      downloadedBytes: 0,
+      createdAt: 1,
+      files: [],
+    };
+    store.addJob(base);
+    store.addJob({ ...base, status: 'downloading' });
+    const rows = useYandexDownloadsStore.getState().jobs.filter((j) => j.id === 'p1');
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.status).toBe('downloading');
+  });
+});
